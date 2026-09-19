@@ -4,48 +4,43 @@
 
 body {
   margin: 0;
-  font-family: Arial, Helvetica, sans-serif;
   background: #080d1d;
-  color: #f5f7ff;
+  color: #ffffff;
+  font-family: Arial, Helvetica, sans-serif;
 }
 
 main {
-  width: min(1400px, 94%);
-  margin: 0 auto;
-  padding: 35px 0 60px;
+  width: 94%;
+  max-width: 1400px;
+  margin: auto;
+  padding: 30px 0 60px;
 }
-
-/* Header */
 
 header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 20px;
   margin-bottom: 35px;
 }
 
 header h1 {
   margin: 0 0 12px;
   font-size: 48px;
-  line-height: 1.1;
 }
 
 header p {
   margin: 0;
-  color: #aeb7d0;
+  color: #9da8c2;
   font-size: 17px;
 }
 
 .badge {
-  background: #6546f5;
+  background: #6746f5;
   padding: 12px 20px;
   border-radius: 25px;
-  white-space: nowrap;
-  font-size: 16px;
 }
 
-/* Controls */
+/* SEARCH */
 
 .controls {
   display: flex;
@@ -55,223 +50,193 @@ header p {
 
 #search {
   flex: 1;
-  height: 58px;
+  height: 56px;
   padding: 0 18px;
-  border: 1px solid #e0e4ef;
-  border-radius: 15px;
-  background: #10172b;
+  border: 1px solid #303b59;
+  border-radius: 12px;
+  background: #11182c;
   color: white;
   font-size: 16px;
-  outline: none;
 }
 
 #search::placeholder {
-  color: #8d96ad;
-}
-
-#search:focus {
-  border-color: #7657ff;
+  color: #7f89a3;
 }
 
 #refresh {
   width: 88px;
-  border: none;
-  border-radius: 15px;
-  background: #6546f5;
+  border: 0;
+  border-radius: 12px;
+  background: #6746f5;
   color: white;
-  font-size: 15px;
   cursor: pointer;
+  font-size: 15px;
 }
-
-#refresh:hover {
-  background: #7657ff;
-}
-
-/* Status */
 
 #status {
-  margin: 12px 0 25px;
-  color: #b6c0d8;
-  font-size: 16px;
+  color: #aeb8d0;
+  margin: 15px 0 25px;
 }
 
-/* Token grid */
+/* TOKEN GRID */
 
 .grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 20px;
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 22px !important;
+  align-items: stretch;
 }
 
-/* Token card */
+/* TOKEN CARD */
 
-.token-card {
+.grid .token-card {
+  display: block !important;
+  width: 100%;
   min-width: 0;
-  min-height: 285px;
-  padding: 22px;
-  background: #11182d;
-  border: 1px solid #202a45;
-  border-radius: 18px;
+  min-height: 300px;
+  padding: 22px !important;
+
+  background: #11182c !important;
+  border: 1px solid #293653 !important;
+  border-radius: 18px !important;
+
   overflow: hidden;
-  transition: transform 0.2s ease,
-              border-color 0.2s ease,
-              box-shadow 0.2s ease;
+  color: #ffffff;
+
+  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.25);
 }
 
-.token-card:hover {
-  transform: translateY(-3px);
-  border-color: #6546f5;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+.grid .token-card:hover {
+  border-color: #6746f5 !important;
 }
 
-/* Logo */
+/* LOGO */
 
 .token-logo {
-  width: 54px;
-  height: 54px;
+  width: 52px;
+  height: 52px;
   margin-bottom: 18px;
 }
 
 .token-logo img,
 .token-placeholder {
-  width: 54px;
-  height: 54px;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
-}
-
-.token-logo img {
-  object-fit: cover;
-  display: block;
 }
 
 .token-placeholder {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #6546f5;
-  color: white;
-  font-size: 21px;
+  background: #6746f5;
+  font-size: 20px;
   font-weight: bold;
 }
 
-/* Token information */
+/* TOKEN TEXT */
 
 .token-info {
+  width: 100%;
   min-width: 0;
 }
 
 .token-info h3 {
   margin: 0 0 8px;
   font-size: 19px;
-  line-height: 1.3;
+  line-height: 1.35;
   word-break: break-word;
 }
 
 .symbol {
-  color: #9ca7c2;
+  color: #929db8;
   font-size: 14px;
-  margin-bottom: 22px;
+  margin-bottom: 20px;
 }
 
 .price {
   font-size: 17px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .holders,
 .trades {
-  color: #b9c2d7;
+  color: #b9c2d6;
   font-size: 14px;
   margin-bottom: 7px;
 }
 
-/* Contract address */
+/* CONTRACT ADDRESS */
 
 .address {
-  margin-top: 15px;
+  width: 100%;
+  margin-top: 16px;
   padding-top: 12px;
-  border-top: 1px solid #202a45;
-  color: #737e9b;
-  font-size: 11px;
-  line-height: 1.5;
 
-  /*
-   * Prevent long wallet addresses from
-   * breaking the card layout.
-   */
+  border-top: 1px solid #293653;
+
+  color: #7f8aa5;
+  font-size: 11px;
+
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* Load more */
+/* LOAD MORE */
 
 .more {
   display: block;
-  margin: 30px auto 0;
+  margin: 30px auto;
   padding: 13px 30px;
-  border: none;
+
+  border: 0;
   border-radius: 12px;
-  background: #6546f5;
+
+  background: #6746f5;
   color: white;
-  font-size: 15px;
+
   cursor: pointer;
+  font-size: 15px;
 }
 
 .more:hover {
-  background: #7657ff;
+  background: #795cff;
 }
 
-/* Footer */
+/* FOOTER */
 
 footer {
-  margin-top: 45px;
+  margin-top: 40px;
   padding-top: 20px;
-  border-top: 1px solid #202a45;
-  color: #69748f;
+  border-top: 1px solid #293653;
+  color: #707c98;
   font-size: 13px;
-  line-height: 1.6;
 }
 
-/* Tablet */
+/* TABLET */
 
 @media (max-width: 1100px) {
   .grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  header h1 {
-    font-size: 40px;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   }
 }
 
-/* Mobile */
+/* MOBILE */
 
 @media (max-width: 750px) {
-  main {
-    width: 92%;
-    padding-top: 25px;
-  }
-
   header {
     flex-direction: column;
     align-items: flex-start;
+    gap: 20px;
   }
 
   header h1 {
-    font-size: 34px;
-  }
-
-  .badge {
-    align-self: flex-start;
+    font-size: 36px;
   }
 
   .controls {
     flex-direction: column;
-  }
-
-  #search {
-    width: 100%;
   }
 
   #refresh {
@@ -280,7 +245,6 @@ footer {
   }
 
   .grid {
-    grid-template-columns: 1fr;
-    gap: 15px;
+    grid-template-columns: 1fr !important;
   }
 }
