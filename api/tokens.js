@@ -2,7 +2,7 @@ const SIKKA_CONTRACT =
     "0xa1aAd2ED952C64248de99dD4D82ae07b87033bfa";
 
 const TRADE_TOPIC =
-    "0xf7dd8a134438de4c59401760e24ef5c6ccc9c74583b2b022085697f3021e59768";
+    "0x47d3fba33a3dd9289bb1b402a128cbea5870c35eb7e684fd999c9b02c612f3f1";
 
 const RPC =
     "https://api.shardeum.org";
