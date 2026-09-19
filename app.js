@@ -1,41 +1,43 @@
 const state = {
   tokens: [],
   cursor: null,
-  loading: false
+  loading: false,
+  shmPriceUsd: null
 };
 
+const PAGE_SIZE = 15;
+
 const grid = document.getElementById("grid");
-const status = document.getElementById("status");
-const moreButton = document.getElementById("more");
-const refreshButton = document.getElementById("refresh");
+const statusEl = document.getElementById("status");
+const moreBtn = document.getElementById("more");
 const searchInput = document.getElementById("search");
+const refreshBtn = document.getElementById("refresh");
 
-async function loadTokens(reset = false) {
-  if (state.loading) return;
 
-  state.loading = true;
+// --------------------------------------------------
+// SHM PRICE
+// --------------------------------------------------
 
-  if (reset) {
-    state.tokens = [];
-    state.cursor = null;
-    grid.innerHTML = "";
+async function loadShmPrice() {
+
+  const priceElement =
+    document.getElementById("shm-price");
+
+  const updatedElement =
+    document.getElementById("shm-updated");
+
+  if (priceElement) {
+    priceElement.textContent = "Loading...";
   }
 
-  status.textContent =
-    state.tokens.length === 0
-      ? "Loading tokens..."
-      : "Loading more tokens...";
-
   try {
-    let url = `/api/tokens?limit=15&_=${Date.now()}`;
 
-    if (state.cursor) {
-      url += `&cursor=${encodeURIComponent(state.cursor)}`;
-    }
-
-    const response = await fetch(url, {
-      cache: "no-store"
-    });
+    const response = await fetch(
+      `/api/shm-price?_=${Date.now()}`,
+      {
+        cache: "no-store"
+      }
+    );
 
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
@@ -45,340 +47,147 @@ async function loadTokens(reset = false) {
 
     if (!data.success) {
       throw new Error(
-        data.error || "Unable to load tokens"
+        data.error || "Unable to get SHM price"
       );
     }
 
-    const existing = new Set(
-      state.tokens.map(token =>
-        token.address.toLowerCase()
-      )
-    );
+    state.shmPriceUsd = Number(data.priceUsd);
 
-    for (const token of data.items || []) {
-      const address =
-        token.address.toLowerCase();
-
-      if (!existing.has(address)) {
-        state.tokens.push(token);
-        existing.add(address);
-      }
+    if (priceElement) {
+      priceElement.textContent =
+        formatUsd(state.shmPriceUsd);
     }
 
-    state.cursor =
-      data.nextCursor || null;
+    if (updatedElement) {
+
+      const date = new Date(data.checkedAt);
+
+      updatedElement.textContent =
+        `Updated: ${date.toLocaleTimeString()}`;
+    }
 
     renderTokens();
 
-    status.textContent =
-      `${state.tokens.length} tokens loaded`;
-
-    moreButton.hidden =
-      !data.hasMore;
-
   } catch (error) {
-    console.error(error);
 
-    status.textContent =
-      `Error: ${error.message}`;
+    console.error(
+      "Failed to load SHM price:",
+      error
+    );
 
-  } finally {
-    state.loading = false;
+    if (priceElement) {
+      priceElement.textContent = "Unavailable";
+    }
+
+    if (updatedElement) {
+      updatedElement.textContent =
+        "Unable to update";
+    }
   }
 }
 
 
-function renderTokens() {
-
-  const search =
-    searchInput.value
-      .trim()
-      .toLowerCase();
-
-  const filtered =
-    state.tokens.filter(token => {
-
-      return (
-        (token.name || "")
-          .toLowerCase()
-          .includes(search) ||
-
-        (token.symbol || "")
-          .toLowerCase()
-          .includes(search) ||
-
-        (token.address || "")
-          .toLowerCase()
-          .includes(search)
-      );
-    });
-
-  grid.innerHTML = "";
-
-  for (const token of filtered) {
-
-    /*
-     * TOKEN CARD
-     */
-    const card =
-      document.createElement("div");
-
-    card.className =
-      "token-card";
-
-
-    /*
-     * TOKEN LOGO
-     */
-    const logoContainer =
-      document.createElement("div");
-
-    logoContainer.className =
-      "token-logo";
-
-
-    if (token.logo) {
-
-      const img =
-        document.createElement("img");
-
-      img.src = token.logo;
-
-      img.alt =
-        token.symbol || "Token";
-
-      img.loading = "lazy";
-
-      img.onerror = function () {
-
-        this.style.display = "none";
-
-        logoContainer.innerHTML =
-          `<div class="token-placeholder">
-             ${escapeHtml(
-               (token.symbol || "?")
-                 .charAt(0)
-                 .toUpperCase()
-             )}
-           </div>`;
-      };
-
-      logoContainer.appendChild(img);
-
-    } else {
-
-      logoContainer.innerHTML =
-        `<div class="token-placeholder">
-          ${escapeHtml(
-            (token.symbol || "?")
-              .charAt(0)
-              .toUpperCase()
-          )}
-        </div>`;
-    }
-
-
-    /*
-     * TOKEN INFORMATION
-     */
-    const info =
-      document.createElement("div");
-
-    info.className =
-      "token-info";
-
-
-    /*
-     * NAME
-     */
-    const name =
-      document.createElement("h3");
-
-    name.textContent =
-      token.name || "Unknown Token";
-
-    info.appendChild(name);
-
-
-    /*
-     * SYMBOL
-     */
-    const symbol =
-      document.createElement("div");
-
-    symbol.className =
-      "symbol";
-
-    symbol.textContent =
-      token.symbol || "?";
-
-    info.appendChild(symbol);
-
-
-    /*
-     * PRICE
-     */
-    const price =
-      document.createElement("div");
-
-    price.className =
-      "price";
-
-    if (
-      token.exchange_rate !== null &&
-      token.exchange_rate !== undefined &&
-      token.exchange_rate !== ""
-    ) {
-
-      const numericPrice =
-        Number(token.exchange_rate);
-
-      if (
-        Number.isFinite(numericPrice)
-      ) {
-
-        price.textContent =
-          `Price: ${formatPrice(numericPrice)}`;
-
-      } else {
-
-        price.textContent =
-          `Price: ${token.exchange_rate}`;
-
-      }
-
-    } else {
-
-      price.textContent =
-        "Price: N/A";
-    }
-
-    info.appendChild(price);
-
-
-    /*
-     * HOLDERS
-     */
-    const holders =
-      document.createElement("div");
-
-    holders.className =
-      "holders";
-
-    holders.textContent =
-      `Holders: ${
-        token.holders ?? "N/A"
-      }`;
-
-    info.appendChild(holders);
-
-
-    /*
-     * SIKKA TRADES
-     */
-    const trades =
-      document.createElement("div");
-
-    trades.className =
-      "trades";
-
-    trades.textContent =
-      `Sikka Trades: ${
-        token.tradeCount ?? 0
-      }`;
-
-    info.appendChild(trades);
-
-
-    /*
-     * CONTRACT ADDRESS
-     */
-    const address =
-      document.createElement("div");
-
-    address.className =
-      "address";
-
-    address.textContent =
-      shortenAddress(token.address);
-
-    address.title =
-      token.address;
-
-    info.appendChild(address);
-
-
-    /*
-     * ADD EVERYTHING TO CARD
-     */
-    card.appendChild(logoContainer);
-
-    card.appendChild(info);
-
-    grid.appendChild(card);
+// --------------------------------------------------
+// FORMATTING
+// --------------------------------------------------
+
+function formatUsd(value) {
+
+  if (
+    value === null ||
+    value === undefined ||
+    !Number.isFinite(Number(value))
+  ) {
+    return "—";
   }
-}
 
+  const n = Number(value);
 
-/*
- * PRICE FORMAT
- */
-function formatPrice(price) {
-
-  if (price === 0) {
+  if (n === 0) {
     return "$0";
   }
 
-  if (price >= 1) {
-    return `$${price.toLocaleString(
-      undefined,
-      {
-        maximumFractionDigits: 6
-      }
-    )}`;
+  if (n < 0.000001) {
+    return "$" + n.toExponential(6);
   }
 
-  if (price >= 0.01) {
-    return `$${price.toFixed(6)}`;
+  if (n < 0.01) {
+    return "$" + n.toFixed(8);
   }
 
-  if (price >= 0.000001) {
-    return `$${price.toFixed(8)}`;
+  if (n < 1) {
+    return "$" + n.toFixed(6);
   }
 
-  return `$${price.toExponential(4)}`;
+  return "$" + n.toFixed(4);
 }
 
 
-/*
- * SHORTEN CONTRACT ADDRESS
- */
+function formatShm(value) {
+
+  if (
+    value === null ||
+    value === undefined ||
+    !Number.isFinite(Number(value))
+  ) {
+    return "—";
+  }
+
+  const n = Number(value);
+
+  if (n < 0.000001) {
+    return n.toExponential(6);
+  }
+
+  if (n < 0.01) {
+    return n.toFixed(8);
+  }
+
+  if (n < 1) {
+    return n.toFixed(6);
+  }
+
+  return n.toFixed(4);
+}
+
+
+function formatNumber(value) {
+
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
+    return "—";
+  }
+
+  const n = Number(value);
+
+  if (!Number.isFinite(n)) {
+    return "—";
+  }
+
+  return n.toLocaleString("en-US");
+}
+
+
 function shortenAddress(address) {
 
   if (!address) {
-    return "";
-  }
-
-  if (address.length <= 14) {
-    return address;
+    return "—";
   }
 
   return (
-    address.substring(0, 6) +
+    address.slice(0, 6) +
     "..." +
-    address.substring(
-      address.length - 6
-    )
+    address.slice(-4)
   );
 }
 
 
-/*
- * HTML SAFETY
- */
 function escapeHtml(value) {
 
-  return String(value)
+  return String(value ?? "")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
@@ -387,34 +196,501 @@ function escapeHtml(value) {
 }
 
 
-/*
- * SEARCH
- */
+// --------------------------------------------------
+// EXPLORER
+// --------------------------------------------------
+
+function getExplorerUrl(address) {
+
+  return (
+    "https://explorer.shardeum.org/address/" +
+    address
+  );
+}
+
+
+// --------------------------------------------------
+// LOGO
+// --------------------------------------------------
+
+function getLogo(token) {
+
+  if (
+    token.logo &&
+    token.logo.trim() !== ""
+  ) {
+    return token.logo;
+  }
+
+  const symbol =
+    token.symbol || "?";
+
+  return (
+    "https://ui-avatars.com/api/" +
+    "?name=" +
+    encodeURIComponent(symbol) +
+    "&background=111827" +
+    "&color=ffffff" +
+    "&size=128" +
+    "&bold=true"
+  );
+}
+
+
+// --------------------------------------------------
+// TOKEN USD PRICE
+// --------------------------------------------------
+
+function getTokenUsdPrice(token) {
+
+  /*
+    If API already provides USD price,
+    use it.
+  */
+
+  if (
+    token.priceUsd !== null &&
+    token.priceUsd !== undefined
+  ) {
+    return Number(token.priceUsd);
+  }
+
+  /*
+    If API provides Sikka price in SHM,
+    calculate:
+
+       Token SHM price
+       ×
+       SHM USD price
+  */
+
+  const priceShm =
+    token.sikkaPriceShm ??
+    token.priceShm ??
+    token.price_shm ??
+    null;
+
+  if (
+    priceShm !== null &&
+    state.shmPriceUsd !== null
+  ) {
+
+    return (
+      Number(priceShm) *
+      Number(state.shmPriceUsd)
+    );
+  }
+
+  return null;
+}
+
+
+// --------------------------------------------------
+// TOKEN CARD
+// --------------------------------------------------
+
+function createCard(token) {
+
+  const address =
+    token.address || "";
+
+  const name =
+    token.name || "Unknown Token";
+
+  const symbol =
+    token.symbol || "—";
+
+  const priceShm =
+    token.sikkaPriceShm ??
+    token.priceShm ??
+    token.price_shm ??
+    null;
+
+  const priceUsd =
+    getTokenUsdPrice(token);
+
+  const explorerUrl =
+    address
+      ? getExplorerUrl(address)
+      : "#";
+
+  return `
+
+    <div class="token-card">
+
+      <div class="token-top">
+
+        <img
+          class="token-logo"
+          src="${escapeHtml(getLogo(token))}"
+          alt="${escapeHtml(symbol)}"
+          onerror="this.style.display='none';"
+        >
+
+        <div class="token-title">
+
+          <h3>
+            ${escapeHtml(name)}
+          </h3>
+
+          <span>
+            ${escapeHtml(symbol)}
+          </span>
+
+        </div>
+
+      </div>
+
+
+      <div class="token-price">
+
+        <div class="price-row">
+
+          <span>
+            Price
+          </span>
+
+          <strong>
+
+            ${
+              priceShm !== null
+                ? formatShm(priceShm) + " SHM"
+                : "—"
+            }
+
+          </strong>
+
+        </div>
+
+
+        <div class="price-row">
+
+          <span>
+            USD
+          </span>
+
+          <strong>
+
+            ${
+              priceUsd !== null
+                ? formatUsd(priceUsd)
+                : "—"
+            }
+
+          </strong>
+
+        </div>
+
+      </div>
+
+
+      <div class="token-info">
+
+        <div>
+
+          <span>
+            Holders
+          </span>
+
+          <strong>
+            ${formatNumber(token.holders)}
+          </strong>
+
+        </div>
+
+
+        <div>
+
+          <span>
+            Sikka Trades
+          </span>
+
+          <strong>
+            ${formatNumber(token.tradeCount)}
+          </strong>
+
+        </div>
+
+      </div>
+
+
+      <div class="token-address">
+
+        <span>
+          Contract
+        </span>
+
+        <a
+          href="${explorerUrl}"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="${escapeHtml(address)}"
+        >
+
+          ${escapeHtml(
+            shortenAddress(address)
+          )}
+
+          ↗
+
+        </a>
+
+      </div>
+
+    </div>
+  `;
+}
+
+
+// --------------------------------------------------
+// RENDER
+// --------------------------------------------------
+
+function renderTokens() {
+
+  const query =
+    searchInput.value
+      .trim()
+      .toLowerCase();
+
+  let tokens =
+    state.tokens;
+
+  if (query) {
+
+    tokens =
+      tokens.filter(token => {
+
+        return (
+
+          String(
+            token.name || ""
+          )
+            .toLowerCase()
+            .includes(query)
+
+          ||
+
+          String(
+            token.symbol || ""
+          )
+            .toLowerCase()
+            .includes(query)
+
+          ||
+
+          String(
+            token.address || ""
+          )
+            .toLowerCase()
+            .includes(query)
+
+        );
+
+      });
+
+  }
+
+
+  if (!tokens.length) {
+
+    grid.innerHTML = `
+      <div class="empty">
+        No tokens found.
+      </div>
+    `;
+
+    return;
+  }
+
+
+  grid.innerHTML =
+    tokens
+      .map(createCard)
+      .join("");
+}
+
+
+// --------------------------------------------------
+// LOAD TOKENS
+// --------------------------------------------------
+
+async function loadTokens(reset = false) {
+
+  if (state.loading) {
+    return;
+  }
+
+  state.loading = true;
+
+
+  if (reset) {
+
+    state.tokens = [];
+    state.cursor = null;
+
+    grid.innerHTML = "";
+
+    statusEl.textContent =
+      "Loading tokens...";
+  }
+
+  else {
+
+    statusEl.textContent =
+      "Loading more tokens...";
+  }
+
+
+  try {
+
+    let url =
+      `/api/tokens?limit=${PAGE_SIZE}&_=${Date.now()}`;
+
+
+    if (state.cursor) {
+
+      url +=
+        `&cursor=${encodeURIComponent(
+          state.cursor
+        )}`;
+
+    }
+
+
+    const response =
+      await fetch(url, {
+        cache: "no-store"
+      });
+
+
+    if (!response.ok) {
+
+      throw new Error(
+        `HTTP ${response.status}`
+      );
+
+    }
+
+
+    const data =
+      await response.json();
+
+
+    if (!data.success) {
+
+      throw new Error(
+        data.error ||
+        "API returned an error"
+      );
+
+    }
+
+
+    if (reset) {
+
+      state.tokens =
+        data.items || [];
+
+    }
+
+    else {
+
+      state.tokens = [
+        ...state.tokens,
+        ...(data.items || [])
+      ];
+
+    }
+
+
+    state.cursor =
+      data.nextCursor || null;
+
+
+    renderTokens();
+
+
+    statusEl.textContent =
+      `${state.tokens.length} tokens loaded`;
+
+
+    moreBtn.hidden =
+      !data.hasMore;
+
+
+  } catch (error) {
+
+    console.error(error);
+
+    statusEl.textContent =
+      "Unable to load tokens.";
+
+    if (!state.tokens.length) {
+
+      grid.innerHTML = `
+        <div class="empty">
+          Failed to load tokens.<br>
+          Please try Refresh.
+        </div>
+      `;
+
+    }
+
+  } finally {
+
+    state.loading = false;
+
+  }
+}
+
+
+// --------------------------------------------------
+// EVENTS
+// --------------------------------------------------
+
 searchInput.addEventListener(
   "input",
-  renderTokens
+  () => {
+    renderTokens();
+  }
 );
 
 
-/*
- * REFRESH
- */
-refreshButton.addEventListener(
+refreshBtn.addEventListener(
   "click",
-  () => loadTokens(true)
+  async () => {
+
+    await loadShmPrice();
+
+    await loadTokens(true);
+
+  }
 );
 
 
-/*
- * LOAD MORE
- */
-moreButton.addEventListener(
+moreBtn.addEventListener(
   "click",
-  () => loadTokens(false)
+  () => {
+    loadTokens(false);
+  }
 );
 
 
-/*
- * INITIAL LOAD
- */
+// --------------------------------------------------
+// START
+// --------------------------------------------------
+
+loadShmPrice();
+
 loadTokens(true);
+
+
+// Refresh SHM price every 60 seconds.
+// CMC documents its latest quote cache/update
+// frequency as approximately every 60 seconds.
+
+setInterval(
+  loadShmPrice,
+  60 * 1000
+);

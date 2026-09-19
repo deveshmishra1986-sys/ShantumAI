@@ -1,7 +1,35 @@
-<!doctype html><html><head><meta charset='utf-8'>
+<!-- <!doctype html><html><head><meta charset='utf-8'>
     <meta name='viewport' content='width=device-width,initial-scale=1'><title>Shardeum Token Explorer</title>
     <link rel="stylesheet" href="/style.css?v=2"></head><body><main><header><div><h1>Shardeum Token Explorer</h1><p>Discover ERC-20 tokens indexed by the Shardeum explorer.</p></div><span class='badge'>Chain 8118</span></header><section class='controls'><input id='search' placeholder='Search name, symbol or contract address'><button id='refresh'>Refresh</button></section><div id='status'>Loading tokens…</div><section id='grid' class='grid'></section><button id='more' class='more' hidden>Load more</button><footer>Token metadata comes from the explorer index. Prices are shown only when the upstream API provides them.</footer></main><script src='/app.js'></script></body>
 <footer>
     Tokens are discovered from Sikka.fun Trade activity on Shardeum.
     Only tokens with at least one BUY or SELL are displayed.
-</footer></html>
+</footer></html> -->
+<section class="shm-price-box">
+
+  <div>
+    <span class="shm-label">
+      🔵 Live SHM Price
+    </span>
+
+    <strong id="shm-price">
+      Loading...
+    </strong>
+
+    <small id="shm-updated">
+      Checking CoinMarketCap...
+    </small>
+  </div>
+
+  <div class="shm-source">
+    Source:
+    <a
+      href="https://coinmarketcap.com/currencies/shardeum-new/"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      CoinMarketCap ↗
+    </a>
+  </div>
+
+</section>
