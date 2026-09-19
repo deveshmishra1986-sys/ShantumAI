@@ -4,228 +4,20 @@ const SIKKA_CONTRACT =
 const TRADE_TOPIC =
     "0xf7dd8a134438de4c59401760e24ef5c6ccc9c74583b2b022085697f3021e59768";
 
-const EXPLORER_API =
+const API =
     "https://explorer.shardeum.org/api/v2";
 
 async function getJson(url) {
     const response = await fetch(url);
 
-    const text = await response.text();
-
     if (!response.ok) {
+        const text = await response.text();
         throw new Error(
             `Explorer API ${response.status}: ${text}`
         );
     }
 
-    return JSON.parse(text);
-}
-
-
-// Get ALL logs from Sikka contract
-async function getSikkaTradeLogs() {
-
-    let allLogs = [];
-    let nextPage = null;
-
-    // Safety limit so one Vercel request doesn't run forever.
-    // We can increase this later if required.
-    const MAX_PAGES = 100;
-
-    for (let page = 0; page < MAX_PAGES; page++) {
-
-        let url =
-            `${EXPLORER_API}/addresses/${SIKKA_CONTRACT}/logs`;
-
-        if (nextPage) {
-
-            const params =
-                new URLSearchParams();
-
-            Object.entries(nextPage).forEach(
-                ([key, value]) => {
-
-                    if (
-                        value !== undefined &&
-                        value !== null &&
-                        value !== ""
-                    ) {
-                        params.append(
-                            key,
-                            value
-                        );
-                    }
-
-                }
-            );
-
-            url += "?" + params.toString();
-        }
-
-        console.log(
-            "Loading Sikka logs:",
-            url
-        );
-
-        const data =
-            await getJson(url);
-
-        const logs =
-            data.items || [];
-
-        allLogs.push(...logs);
-
-        nextPage =
-            data.next_page_params || null;
-
-        if (!nextPage) {
-            break;
-        }
-    }
-
-    return allLogs;
-}
-
-
-// Extract subject/token + buy/sell from Trade event
-function parseTrade(log) {
-
-    const topics =
-        log.topics || [];
-
-    if (!topics.length) {
-        return null;
-    }
-
-    // Topic 0 must be Trade(...)
-    if (
-        topics[0].toLowerCase() !==
-        TRADE_TOPIC.toLowerCase()
-    ) {
-        return null;
-    }
-
-    // topics:
-    //
-    // topic[0] = Trade event signature
-    // topic[1] = trader
-    // topic[2] = subject/token
-    //
-    if (topics.length < 3) {
-        return null;
-    }
-
-    const trader =
-        "0x" +
-        topics[1].slice(-40);
-
-    const subject =
-        "0x" +
-        topics[2].slice(-40);
-
-    // Data layout:
-    //
-    // word 0 = isBuy
-    // word 1 = shareAmount
-    // word 2 = tokenAmount
-    // word 3 = supply
-
-    const data =
-        (log.data || "0x").slice(2);
-
-    if (data.length < 64) {
-        return null;
-    }
-
-    const isBuy =
-        BigInt(
-            "0x" +
-            data.substring(0, 64)
-        ) === 1n;
-
-    return {
-
-        token:
-            subject.toLowerCase(),
-
-        trader:
-            trader.toLowerCase(),
-
-        isBuy,
-
-        transactionHash:
-            log.transaction_hash,
-
-        blockNumber:
-            log.block_number
-
-    };
-}
-
-
-// Get token metadata from Blockscout
-async function getTokenMetadata(address) {
-
-    try {
-
-        const url =
-            `${EXPLORER_API}/tokens/${address}`;
-
-        const data =
-            await getJson(url);
-
-        return {
-
-            address:
-                data.address_hash ||
-                address,
-
-            name:
-                data.name ||
-                "Unknown Token",
-
-            symbol:
-                data.symbol ||
-                "-",
-
-            logo:
-                data.icon_url ||
-                data.logo_url ||
-                data.logo ||
-                "",
-
-            exchangeRate:
-                data.exchange_rate ||
-                null
-
-        };
-
-    } catch (error) {
-
-        console.log(
-            "Metadata unavailable:",
-            address,
-            error.message
-        );
-
-        return {
-
-            address,
-
-            name:
-                "Unknown Token",
-
-            symbol:
-                "-",
-
-            logo:
-                "",
-
-            exchangeRate:
-                null
-
-        };
-    }
+    return response.json();
 }
 
 
@@ -234,57 +26,98 @@ export default async function handler(req, res) {
     try {
 
         const search =
-            (
-                req.query.q ||
-                ""
-            )
+            (req.query.q || "")
                 .trim()
                 .toLowerCase();
 
 
-        // -----------------------------------
-        // 1. Get Sikka Trade events
-        // -----------------------------------
-
-        const logs =
-            await getSikkaTradeLogs();
-
-
-        // -----------------------------------
-        // 2. Extract BUY / SELL events
-        // -----------------------------------
-
-        const trades =
-            logs
-                .map(parseTrade)
-                .filter(Boolean);
+        // Only get the first page of Sikka logs.
+        // This prevents Vercel timeout.
+        const url =
+            `${API}/addresses/${SIKKA_CONTRACT}/logs`;
 
 
         console.log(
-            "Trade events:",
-            trades.length
+            "Getting Sikka logs:",
+            url
         );
 
 
-        // -----------------------------------
-        // 3. Group by token
-        // -----------------------------------
+        const data =
+            await getJson(url);
+
+
+        const logs =
+            data.items || [];
+
+
+        console.log(
+            "Logs received:",
+            logs.length
+        );
+
 
         const tokenMap =
             new Map();
 
 
-        for (const trade of trades) {
+        for (const log of logs) {
 
-            const token =
-                trade.token;
+            const topics =
+                log.topics || [];
 
-            if (!tokenMap.has(token)) {
+
+            // Only Trade events
+            if (
+                !topics[0] ||
+                topics[0].toLowerCase() !==
+                TRADE_TOPIC.toLowerCase()
+            ) {
+                continue;
+            }
+
+
+            if (topics.length < 3)
+                continue;
+
+
+            // topic 2 = subject/token
+            const tokenAddress =
+                "0x" +
+                topics[2].slice(-40);
+
+
+            const dataHex =
+                (log.data || "0x")
+                    .slice(2);
+
+
+            if (dataHex.length < 64)
+                continue;
+
+
+            // First 32-byte word = isBuy
+            const isBuy =
+                BigInt(
+                    "0x" +
+                    dataHex.substring(
+                        0,
+                        64
+                    )
+                ) === 1n;
+
+
+            const key =
+                tokenAddress.toLowerCase();
+
+
+            if (!tokenMap.has(key)) {
 
                 tokenMap.set(
-                    token,
+                    key,
                     {
-                        address: token,
+                        address:
+                            tokenAddress,
 
                         buys: 0,
 
@@ -297,48 +130,40 @@ export default async function handler(req, res) {
             }
 
 
-            const item =
-                tokenMap.get(token);
+            const token =
+                tokenMap.get(key);
 
 
-            if (trade.isBuy) {
+            if (isBuy) {
 
-                item.buys++;
+                token.buys++;
 
             } else {
 
-                item.sells++;
+                token.sells++;
 
             }
 
 
-            item.trades++;
+            token.trades++;
 
         }
 
 
-        // -----------------------------------
-        // 4. Only tokens with >= 1 trade
-        // -----------------------------------
-
-        let tradedTokens =
+        let tokens =
             Array.from(
                 tokenMap.values()
-            )
-                .filter(
-                    token =>
-                        token.trades >= 1
-                );
+            );
 
 
-        // -----------------------------------
-        // 5. Search
-        // -----------------------------------
+        // --------------------------------
+        // Search by contract address
+        // --------------------------------
 
         if (search) {
 
-            tradedTokens =
-                tradedTokens.filter(
+            tokens =
+                tokens.filter(
                     token =>
                         token.address
                             .toLowerCase()
@@ -348,56 +173,102 @@ export default async function handler(req, res) {
         }
 
 
-        // -----------------------------------
-        // 6. Fetch token metadata
-        // -----------------------------------
+        // --------------------------------
+        // Get metadata
+        // --------------------------------
 
         const result = [];
 
+
+        // IMPORTANT:
+        // Only fetch metadata for a small
+        // number of tokens per request.
+
         for (
-            const token of tradedTokens
+            const token of tokens.slice(0, 30)
         ) {
 
-            const metadata =
-                await getTokenMetadata(
-                    token.address
-                );
+            try {
+
+                const metadata =
+                    await getJson(
+                        `${API}/tokens/${token.address}`
+                    );
 
 
-            result.push({
+                result.push({
 
-                address:
-                    token.address,
+                    address:
+                        token.address,
 
-                name:
-                    metadata.name,
+                    name:
+                        metadata.name ||
+                        "Unknown Token",
 
-                symbol:
-                    metadata.symbol,
+                    symbol:
+                        metadata.symbol ||
+                        "-",
 
-                logo:
-                    metadata.logo,
+                    logo:
+                        metadata.icon_url ||
+                        "",
 
-                exchange_rate:
-                    metadata.exchangeRate,
+                    exchange_rate:
+                        metadata.exchange_rate ||
+                        null,
 
-                buys:
-                    token.buys,
+                    buys:
+                        token.buys,
 
-                sells:
-                    token.sells,
+                    sells:
+                        token.sells,
 
-                trades:
-                    token.trades
+                    trades:
+                        token.trades
 
-            });
+                });
+
+            } catch (e) {
+
+                // Still return the token
+                // if metadata is unavailable.
+
+                result.push({
+
+                    address:
+                        token.address,
+
+                    name:
+                        "Unknown Token",
+
+                    symbol:
+                        "-",
+
+                    logo:
+                        "",
+
+                    exchange_rate:
+                        null,
+
+                    buys:
+                        token.buys,
+
+                    sells:
+                        token.sells,
+
+                    trades:
+                        token.trades
+
+                });
+
+            }
 
         }
 
 
-        // -----------------------------------
-        // 7. Search name/symbol too
-        // -----------------------------------
+        // --------------------------------
+        // Search name / symbol
+        // --------------------------------
 
         let finalResult =
             result;
@@ -435,7 +306,10 @@ export default async function handler(req, res) {
                 finalResult,
 
             total:
-                finalResult.length
+                finalResult.length,
+
+            scannedLogs:
+                logs.length
 
         });
 
@@ -443,14 +317,15 @@ export default async function handler(req, res) {
     } catch (error) {
 
         console.error(
-            "Sikka token API error:",
+            "Sikka API ERROR:",
             error
         );
+
 
         return res.status(500).json({
 
             error:
-                "Unable to load Sikka traded tokens",
+                "Sikka API failed",
 
             details:
                 error.message
