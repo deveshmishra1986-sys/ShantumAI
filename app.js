@@ -4,11 +4,11 @@ const state = {
     loading: false
 };
 
-const tokenGrid = document.getElementById("tokenGrid");
+const grid = document.getElementById("grid");
 const status = document.getElementById("status");
 const searchInput = document.getElementById("search");
 const refreshButton = document.getElementById("refresh");
-const loadMoreButton = document.getElementById("loadMore");
+const moreButton = document.getElementById("more");
 
 async function loadTokens(reset = false) {
 
@@ -19,7 +19,8 @@ async function loadTokens(reset = false) {
     if (reset) {
         state.tokens = [];
         state.nextPageParams = null;
-        tokenGrid.innerHTML = "";
+        grid.innerHTML = "";
+        moreButton.hidden = true;
     }
 
     status.textContent = "Loading tokens...";
@@ -28,18 +29,24 @@ async function loadTokens(reset = false) {
 
         let url = "/api/tokens";
 
-        // Add pagination parameters returned by Blockscout
+        // Load next page using Blockscout cursor
         if (state.nextPageParams) {
 
             const params = new URLSearchParams();
 
-            Object.entries(state.nextPageParams).forEach(([key, value]) => {
+            Object.entries(state.nextPageParams).forEach(
+                ([key, value]) => {
 
-                if (value !== null && value !== undefined) {
-                    params.append(key, value);
+                    if (
+                        value !== undefined &&
+                        value !== null &&
+                        value !== ""
+                    ) {
+                        params.append(key, value);
+                    }
+
                 }
-
-            });
+            );
 
             url += "?" + params.toString();
         }
@@ -59,6 +66,7 @@ async function loadTokens(reset = false) {
                 data.error ||
                 `HTTP ${response.status}`
             );
+
         }
 
         const newTokens = data.items || [];
@@ -68,6 +76,7 @@ async function loadTokens(reset = false) {
             ...newTokens
         ];
 
+        // IMPORTANT: save next page cursor
         state.nextPageParams =
             data.next_page_params || null;
 
@@ -76,19 +85,20 @@ async function loadTokens(reset = false) {
         status.textContent =
             `Showing ${state.tokens.length} loaded tokens`;
 
-        // Show/hide Load More
-        if (state.nextPageParams) {
-            loadMoreButton.style.display = "block";
-        } else {
-            loadMoreButton.style.display = "none";
-        }
+        // Show Load More only when another page exists
+        moreButton.hidden =
+            !state.nextPageParams;
 
     } catch (error) {
 
-        console.error("Token loading error:", error);
+        console.error(
+            "Token loading error:",
+            error
+        );
 
         status.textContent =
-            "Could not load tokens: " + error.message;
+            "Could not load tokens: " +
+            error.message;
 
     } finally {
 
@@ -108,13 +118,19 @@ function renderTokens() {
         state.tokens.filter(token => {
 
             const name =
-                (token.name || "").toLowerCase();
+                (token.name || "")
+                    .toLowerCase();
 
             const symbol =
-                (token.symbol || "").toLowerCase();
+                (token.symbol || "")
+                    .toLowerCase();
 
             const address =
-                (token.address_hash || "").toLowerCase();
+                (
+                    token.address_hash ||
+                    token.address ||
+                    ""
+                ).toLowerCase();
 
             return (
                 name.includes(search) ||
@@ -124,72 +140,99 @@ function renderTokens() {
 
         });
 
-    tokenGrid.innerHTML = "";
+    grid.innerHTML = "";
+
+    if (filtered.length === 0) {
+
+        grid.innerHTML =
+            `<div class="empty">
+                No tokens found.
+             </div>`;
+
+        return;
+    }
 
     filtered.forEach(token => {
-
-        const card =
-            document.createElement("div");
-
-        card.className = "token-card";
-
-        const logo =
-            token.icon_url ||
-            token.logo ||
-            "";
-
-        const image =
-            logo
-                ? `<img src="${logo}" alt="${token.symbol || "Token"}">`
-                : `<div class="token-placeholder">
-                       ${(token.symbol || "?")
-                           .charAt(0)
-                           .toUpperCase()}
-                   </div>`;
 
         const address =
             token.address_hash ||
             token.address ||
             "";
 
+        const name =
+            token.name ||
+            "Unknown Token";
+
+        const symbol =
+            token.symbol ||
+            "-";
+
+        const logo =
+            token.icon_url ||
+            token.logo ||
+            "";
+
+        const price =
+            token.exchange_rate
+                ? "$" + token.exchange_rate
+                : "Price unavailable";
+
         const explorerUrl =
             `https://explorer.shardeum.org/token/${address}`;
 
+        const card =
+            document.createElement("article");
+
+        card.className = "card";
+
+        let logoHTML;
+
+        if (logo) {
+
+            logoHTML =
+                `<img
+                    class="logo"
+                    src="${escapeHtml(logo)}"
+                    alt="${escapeHtml(symbol)}"
+                    onerror="this.style.display='none'"
+                >`;
+
+        } else {
+
+            logoHTML =
+                `<div class="logo placeholder">
+                    ${escapeHtml(
+                        symbol.charAt(0).toUpperCase()
+                    )}
+                </div>`;
+
+        }
+
         card.innerHTML = `
 
-            <div class="token-header">
+            <div class="token-top">
 
-                ${image}
+                ${logoHTML}
 
                 <div>
 
                     <h2>
-                        ${escapeHtml(
-                            token.name || "Unknown Token"
-                        )}
+                        ${escapeHtml(name)}
                     </h2>
 
-                    <span>
-                        ${escapeHtml(
-                            token.symbol || "-"
-                        )}
-                    </span>
+                    <div class="symbol">
+                        ${escapeHtml(symbol)}
+                    </div>
 
                 </div>
 
             </div>
 
-            <div class="token-price">
-
-                ${
-                    token.exchange_rate
-                        ? "$" + token.exchange_rate
-                        : "Price unavailable"
-                }
-
+            <div class="price">
+                ${escapeHtml(price)}
             </div>
 
-            <div class="token-address">
+            <div class="address">
                 ${shortAddress(address)}
             </div>
 
@@ -203,7 +246,7 @@ function renderTokens() {
 
         `;
 
-        tokenGrid.appendChild(card);
+        grid.appendChild(card);
 
     });
 }
@@ -212,6 +255,10 @@ function renderTokens() {
 function shortAddress(address) {
 
     if (!address) return "";
+
+    if (address.length < 20) {
+        return address;
+    }
 
     return (
         address.substring(0, 10) +
@@ -238,18 +285,16 @@ searchInput.addEventListener(
     renderTokens
 );
 
-
 refreshButton.addEventListener(
     "click",
     () => loadTokens(true)
 );
 
-
-loadMoreButton.addEventListener(
+moreButton.addEventListener(
     "click",
     () => loadTokens(false)
 );
 
 
-// Initial load
+// Start
 loadTokens(true);
