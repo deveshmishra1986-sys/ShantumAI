@@ -1,7 +1,7 @@
 export default async function handler(req, res) {
   try {
     const url =
-      "https://pro-api.coinmarketcap.com/public-api/v3/cryptocurrency/quotes/latest" +
+      "https://pro-api.coinmarketcap.com/public-api/v2/simple/price" +
       "?slug=shardeum-new&convert=USD";
 
     const response = await fetch(url, {
@@ -14,10 +14,7 @@ export default async function handler(req, res) {
 
     const data = await response.json();
 
-    console.log(
-      "CoinMarketCap response:",
-      JSON.stringify(data)
-    );
+    console.log("CMC:", JSON.stringify(data));
 
     if (!response.ok) {
       return res.status(response.status).json({
@@ -28,19 +25,7 @@ export default async function handler(req, res) {
     }
 
     /*
-      CMC response is normally:
-
-      data: {
-        "12345": {
-          name: "Shardeum",
-          symbol: "SHM",
-          quote: {
-            USD: {
-              price: ...
-            }
-          }
-        }
-      }
+      Find SHM in the response.
     */
 
     const records = data?.data || {};
@@ -51,29 +36,22 @@ export default async function handler(req, res) {
     );
 
     const price =
-      shm?.quote?.USD?.price ?? null;
+      shm?.quote?.USD?.price ??
+      shm?.USD ??
+      shm?.price ??
+      null;
 
     if (price === null) {
       return res.status(502).json({
         success: false,
         error: "SHM price not found",
-        cmcResponse: data
+        details: data
       });
     }
 
     res.setHeader(
       "Cache-Control",
       "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
-    );
-
-    res.setHeader(
-      "Pragma",
-      "no-cache"
-    );
-
-    res.setHeader(
-      "Expires",
-      "0"
     );
 
     return res.status(200).json({
@@ -86,10 +64,7 @@ export default async function handler(req, res) {
 
   } catch (error) {
 
-    console.error(
-      "SHM price error:",
-      error
-    );
+    console.error(error);
 
     return res.status(500).json({
       success: false,
