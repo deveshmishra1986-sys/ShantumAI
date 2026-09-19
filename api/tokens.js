@@ -2,8 +2,7 @@ const EXPLORER_API =
   "https://explorer.shardeum.org/api/v2";
 
 const SIKKA_CONTRACT =
-  "0xa1aAd2ED952C64248de99dD4D82ae07b87033bfa"
-    .toLowerCase();
+  "0xa1aAd2ED952C64248de99dD4D82ae07b87033bfa".toLowerCase();
 
 const TRADE_TOPIC =
   "0x47d3fba33a3dd9289bb1b402a128cbea5870c35eb7e684fd999c9b02c612f3f1";
@@ -132,7 +131,8 @@ function convertToken(
 
   // Never include Sikka itself
   if (
-    address === SIKKA_CONTRACT
+    address ===
+    SIKKA_CONTRACT
   ) {
     return null;
   }
@@ -256,6 +256,7 @@ export default async function handler(
 
 
     // Remove duplicate transactions
+
     const uniqueTransactions =
       [
         ...new Set(
@@ -281,9 +282,6 @@ export default async function handler(
     // ------------------------------------------------
     // Process transactions
     // ------------------------------------------------
-
-    // Keep this small so Vercel
-    // does not get overloaded.
 
     const batchSize = 3;
 
@@ -359,7 +357,8 @@ export default async function handler(
       }
 
 
-      // Stop as soon as we have enough
+      // Stop once we have enough tokens
+
       if (
         tokenMap.size >= limit
       ) {
@@ -369,7 +368,7 @@ export default async function handler(
 
 
     // ------------------------------------------------
-    // Sort
+    // Sort tokens
     // ------------------------------------------------
 
     const items =
