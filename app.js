@@ -1,601 +1,217 @@
 const state = {
-
-    tokens: [],
-
-    nextBeforeBlock: null,
-
-    loading: false
-
+  tokens: [],
+  cursor: null,
+  loading: false
 };
 
-
-const grid =
-    document.getElementById("grid");
-
-const status =
-    document.getElementById("status");
-
-const searchInput =
-    document.getElementById("search");
-
-const refreshButton =
-    document.getElementById("refresh");
-
-const moreButton =
-    document.getElementById("more");
-
-
-// --------------------------------------
-// LOAD TOKENS
-// --------------------------------------
+const grid = document.getElementById("grid");
+const status = document.getElementById("status");
+const moreButton = document.getElementById("more");
+const refreshButton = document.getElementById("refresh");
+const searchInput = document.getElementById("search");
 
 async function loadTokens(reset = false) {
+  if (state.loading) return;
 
-    if (state.loading)
-        return;
+  state.loading = true;
 
+  if (reset) {
+    state.tokens = [];
+    state.cursor = null;
+    grid.innerHTML = "";
+  }
 
-    state.loading = true;
+  status.textContent =
+    state.tokens.length === 0
+      ? "Loading tokens..."
+      : "Loading more tokens...";
 
+  try {
+    let url =
+      `/api/tokens?limit=15&_=${Date.now()}`;
 
-    if (reset) {
-
-        state.tokens = [];
-
-        state.nextBeforeBlock = null;
-
-        grid.innerHTML = "";
-
+    if (state.cursor) {
+      url +=
+        `&cursor=${encodeURIComponent(state.cursor)}`;
     }
 
+    const response = await fetch(url, {
+      cache: "no-store"
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `HTTP ${response.status}`
+      );
+    }
+
+    const data = await response.json();
+
+    if (!data.success) {
+      throw new Error(
+        data.error || "Unable to load tokens"
+      );
+    }
+
+    const existing =
+      new Set(
+        state.tokens.map(
+          token =>
+            token.address.toLowerCase()
+        )
+      );
+
+    for (const token of data.items || []) {
+      const address =
+        token.address.toLowerCase();
+
+      if (!existing.has(address)) {
+        state.tokens.push(token);
+        existing.add(address);
+      }
+    }
+
+    state.cursor =
+      data.nextCursor || null;
+
+    renderTokens();
 
     status.textContent =
-        "Loading traded tokens...";
+      `${state.tokens.length} tokens loaded`;
 
+    moreButton.hidden =
+      !data.hasMore;
 
-    try {
+  } catch (error) {
+    console.error(error);
 
-        let url =
-            "/api/tokens?limit=50";
+    status.textContent =
+      `Error: ${error.message}`;
 
-
-        if (
-            state.nextBeforeBlock !== null
-        ) {
-
-            url +=
-                "&beforeBlock=" +
-                state.nextBeforeBlock;
-
-        }
-
-
-        console.log(
-            "Loading:",
-            url
-        );
-
-
-        const response =
-            await fetch(url);
-
-
-        const data =
-            await response.json();
-
-
-        if (!response.ok) {
-
-            throw new Error(
-                data.details ||
-                data.error ||
-                "API error"
-            );
-
-        }
-
-
-        const newTokens =
-            data.items || [];
-
-
-        // --------------------------------
-        // Remove duplicate addresses
-        // --------------------------------
-
-        const map =
-            new Map();
-
-
-        [
-            ...state.tokens,
-            ...newTokens
-        ]
-            .forEach(token => {
-
-                map.set(
-                    token.address.toLowerCase(),
-                    token
-                );
-
-            });
-
-
-        state.tokens =
-            Array.from(
-                map.values()
-            );
-
-
-        state.nextBeforeBlock =
-            data.nextBeforeBlock;
-
-
-        renderTokens();
-
-
-        status.textContent =
-            `Showing ${state.tokens.length} traded tokens`;
-
-
-        // Hide Load More if no more data
-
-        if (
-            !newTokens.length ||
-            data.nextBeforeBlock <= 0
-        ) {
-
-            moreButton.hidden =
-                true;
-
-        } else {
-
-            moreButton.hidden =
-                false;
-
-        }
-
-
-    } catch (error) {
-
-        console.error(error);
-
-
-        status.textContent =
-            "Could not load tokens: " +
-            error.message;
-
-    } finally {
-
-        state.loading = false;
-
-    }
-
+  } finally {
+    state.loading = false;
+  }
 }
-
-
-// --------------------------------------
-// RENDER
-// --------------------------------------
 
 function renderTokens() {
+  const search =
+    searchInput.value
+      .trim()
+      .toLowerCase();
 
-    grid.innerHTML = "";
+  const filtered =
+    state.tokens.filter(token => {
+      return (
+        (token.name || "")
+          .toLowerCase()
+          .includes(search) ||
 
+        (token.symbol || "")
+          .toLowerCase()
+          .includes(search) ||
 
-    if (
-        state.tokens.length === 0
-    ) {
+        (token.address || "")
+          .toLowerCase()
+          .includes(search)
+      );
+    });
 
-        grid.innerHTML =
-            `
-            <div class="empty">
-                No traded tokens found.
-            </div>
-            `;
+  grid.innerHTML = "";
 
-        return;
+  if (filtered.length === 0) {
+    grid.innerHTML =
+      `<div>No tokens found.</div>`;
+    return;
+  }
 
-    }
+  for (const token of filtered) {
+    const card =
+      document.createElement("div");
 
+    card.className = "token-card";
 
-    state.tokens.forEach(
-        token => {
+    const logo =
+      token.logo
+        ? `<img src="${token.logo}" alt="${token.symbol}">`
+        : `<div class="token-placeholder">
+             ${escapeHtml(
+               (token.symbol || "?")
+                 .charAt(0)
+                 .toUpperCase()
+             )}
+           </div>`;
 
-            const address =
-                token.address;
+    const price =
+      token.exchange_rate !== null &&
+      token.exchange_rate !== undefined
+        ? `$${token.exchange_rate}`
+        : "N/A";
 
+    card.innerHTML = `
+      <div class="token-logo">
+        ${logo}
+      </div>
 
-            const name =
-                token.name ||
-                "Unknown Token";
+      <div class="token-info">
+        <h3>
+          ${escapeHtml(
+            token.name || "Unknown"
+          )}
+        </h3>
 
+        <div class="symbol">
+          ${escapeHtml(
+            token.symbol || "?"
+          )}
+        </div>
 
-            const symbol =
-                token.symbol ||
-                "-";
+        <div class="price">
+          Price: ${price}
+        </div>
 
+        <div class="holders">
+          Holders:
+          ${token.holders ?? "N/A"}
+        </div>
 
-            const logo =
-                token.logo ||
-                "";
+        <div class="trades">
+          Sikka Trades:
+          ${token.tradeCount ?? 0}
+        </div>
 
+        <div class="address">
+          ${token.address}
+        </div>
+      </div>
+    `;
 
-            const price =
-                token.exchange_rate
-                    ? "$" +
-                      token.exchange_rate
-                    : "Price unavailable";
-
-
-            const explorerUrl =
-                `https://explorer.shardeum.org/token/${address}`;
-
-
-            const card =
-                document.createElement(
-                    "article"
-                );
-
-
-            card.className =
-                "card";
-
-
-            let logoHTML;
-
-
-            if (logo) {
-
-                logoHTML =
-                    `
-                    <img
-                        class="logo"
-                        src="${escapeHtml(logo)}"
-                        alt="${escapeHtml(symbol)}"
-                    >
-                    `;
-
-            } else {
-
-                logoHTML =
-                    `
-                    <div class="logo placeholder">
-                        ${escapeHtml(
-                            symbol
-                                .charAt(0)
-                                .toUpperCase()
-                        )}
-                    </div>
-                    `;
-
-            }
-
-
-            card.innerHTML =
-
-                `
-
-                <div class="token-top">
-
-                    ${logoHTML}
-
-                    <div>
-
-                        <h2>
-                            ${escapeHtml(name)}
-                        </h2>
-
-                        <div class="symbol">
-                            ${escapeHtml(symbol)}
-                        </div>
-
-                    </div>
-
-                </div>
-
-
-                <div class="price">
-                    ${escapeHtml(price)}
-                </div>
-
-
-                <div class="trade-info">
-
-                    📊 Trades:
-                    ${token.tradeCount || 1}
-
-                </div>
-
-
-                <div class="address">
-
-                    ${shortAddress(address)}
-
-                </div>
-
-
-                <a
-                    href="${explorerUrl}"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                >
-                    View on explorer ↗
-                </a>
-
-                `;
-
-
-            grid.appendChild(card);
-
-        }
-    );
-
+    grid.appendChild(card);
+  }
 }
-
-
-// --------------------------------------
-// SEARCH
-// --------------------------------------
-
-let searchTimer;
-
-
-searchInput.addEventListener(
-    "input",
-    () => {
-
-        clearTimeout(
-            searchTimer
-        );
-
-
-        searchTimer =
-            setTimeout(
-                () => {
-
-                    const text =
-                        searchInput.value
-                            .trim()
-                            .toLowerCase();
-
-
-                    if (!text) {
-
-                        renderTokens();
-
-                        return;
-
-                    }
-
-
-                    const filtered =
-                        state.tokens.filter(
-                            token =>
-
-                                token.name
-                                    .toLowerCase()
-                                    .includes(text)
-
-                                ||
-
-                                token.symbol
-                                    .toLowerCase()
-                                    .includes(text)
-
-                                ||
-
-                                token.address
-                                    .toLowerCase()
-                                    .includes(text)
-
-                        );
-
-
-                    renderFiltered(
-                        filtered
-                    );
-
-                },
-                300
-            );
-
-    }
-);
-
-
-// --------------------------------------
-// FILTERED RENDER
-// --------------------------------------
-
-function renderFiltered(tokens) {
-
-    grid.innerHTML = "";
-
-
-    if (!tokens.length) {
-
-        grid.innerHTML =
-            `
-            <div class="empty">
-                Token not found in loaded tokens.
-            </div>
-            `;
-
-        return;
-
-    }
-
-
-    tokens.forEach(
-        token => {
-
-            const address =
-                token.address;
-
-
-            const card =
-                document.createElement(
-                    "article"
-                );
-
-
-            card.className =
-                "card";
-
-
-            card.innerHTML =
-
-                `
-
-                <div class="token-top">
-
-                    <div class="logo placeholder">
-
-                        ${escapeHtml(
-                            (
-                                token.symbol ||
-                                "?"
-                            )
-                                .charAt(0)
-                                .toUpperCase()
-                        )}
-
-                    </div>
-
-                    <div>
-
-                        <h2>
-                            ${escapeHtml(
-                                token.name
-                            )}
-                        </h2>
-
-                        <div class="symbol">
-                            ${escapeHtml(
-                                token.symbol
-                            )}
-                        </div>
-
-                    </div>
-
-                </div>
-
-
-                <div class="trade-info">
-
-                    📊 Trades:
-                    ${token.tradeCount || 1}
-
-                </div>
-
-
-                <div class="address">
-
-                    ${shortAddress(address)}
-
-                </div>
-
-
-                <a
-                    href="https://explorer.shardeum.org/token/${address}"
-                    target="_blank"
-                >
-                    View on explorer ↗
-                </a>
-
-                `;
-
-
-            grid.appendChild(card);
-
-        }
-    );
-
-}
-
-
-// --------------------------------------
-// REFRESH
-// --------------------------------------
-
-refreshButton.addEventListener(
-    "click",
-    () => {
-
-        searchInput.value = "";
-
-        loadTokens(true);
-
-    }
-);
-
-
-// --------------------------------------
-// LOAD MORE
-// --------------------------------------
-
-moreButton.addEventListener(
-    "click",
-    () => {
-
-        loadTokens(false);
-
-    }
-);
-
-
-// --------------------------------------
-// HELPERS
-// --------------------------------------
-
-function shortAddress(address) {
-
-    return (
-        address.substring(0, 10) +
-        "..." +
-        address.substring(
-            address.length - 6
-        )
-    );
-
-}
-
 
 function escapeHtml(value) {
-
-    return String(value)
-
-        .replaceAll(
-            "&",
-            "&amp;"
-        )
-
-        .replaceAll(
-            "<",
-            "&lt;"
-        )
-
-        .replaceAll(
-            ">",
-            "&gt;"
-        )
-
-        .replaceAll(
-            '"',
-            "&quot;"
-        )
-
-        .replaceAll(
-            "'",
-            "&#039;"
-        );
-
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
+moreButton.addEventListener(
+  "click",
+  () => loadTokens(false)
+);
 
-// --------------------------------------
-// START
-// --------------------------------------
+refreshButton.addEventListener(
+  "click",
+  () => loadTokens(true)
+);
 
+searchInput.addEventListener(
+  "input",
+  () => renderTokens()
+);
+
+// Initial load
 loadTokens(true);
