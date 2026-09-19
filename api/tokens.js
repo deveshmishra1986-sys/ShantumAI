@@ -11,36 +11,60 @@ const EXPLORER_API =
     "https://explorer.shardeum.org/api/v2";
 
 const BLOCK_STEP = 5000;
+
 const DEFAULT_LIMIT = 50;
 
 
-// --------------------------------------
-// JSON RPC
-// --------------------------------------
+// ======================================
+// Convert number to valid even-length HEX
+// ======================================
+
+function toEvenHex(number) {
+
+    let hex =
+        Number(number).toString(16);
+
+    if (hex.length % 2 !== 0) {
+
+        hex =
+            "0" + hex;
+
+    }
+
+    return "0x" + hex;
+}
+
+
+// ======================================
+// Shardeum RPC
+// ======================================
 
 async function rpc(method, params) {
 
-    const response = await fetch(RPC, {
+    const response =
+        await fetch(
+            RPC,
+            {
+                method: "POST",
 
-        method: "POST",
+                headers: {
+                    "Content-Type":
+                        "application/json"
+                },
 
-        headers: {
-            "Content-Type": "application/json"
-        },
+                body: JSON.stringify({
 
-        body: JSON.stringify({
+                    jsonrpc: "2.0",
 
-            jsonrpc: "2.0",
+                    id: 1,
 
-            id: 1,
+                    method,
 
-            method,
+                    params
 
-            params
-
-        })
-
-    });
+                })
+            }
+        );
 
 
     const data =
@@ -51,20 +75,19 @@ async function rpc(method, params) {
 
         throw new Error(
             data.error.message ||
-            "RPC error"
+            "Shardeum RPC error"
         );
 
     }
 
 
     return data.result;
-
 }
 
 
-// --------------------------------------
-// Get latest block
-// --------------------------------------
+// ======================================
+// Get latest Shardeum block
+// ======================================
 
 async function getLatestBlock() {
 
@@ -74,6 +97,7 @@ async function getLatestBlock() {
             []
         );
 
+
     return parseInt(
         result,
         16
@@ -82,52 +106,54 @@ async function getLatestBlock() {
 }
 
 
-// --------------------------------------
-// Get Sikka Trade logs
-// --------------------------------------
+// ======================================
+// Get Sikka Trade events
+// ======================================
 
 async function getTradeLogs(
     fromBlock,
     toBlock
 ) {
 
-    return await rpc(
+    const filter = {
 
-        "eth_getLogs",
+        address:
+            SIKKA_CONTRACT,
 
-        [
+        fromBlock:
+            toEvenHex(fromBlock),
 
-            {
+        toBlock:
+            toEvenHex(toBlock),
 
-                address:
-                    SIKKA_CONTRACT,
+        topics: [
 
-                fromBlock:
-                    "0x" +
-                    fromBlock.toString(16),
-
-                toBlock:
-                    "0x" +
-                    toBlock.toString(16),
-
-                topics: [
-
-                    TRADE_TOPIC
-
-                ]
-
-            }
+            TRADE_TOPIC
 
         ]
 
+    };
+
+
+    console.log(
+        "RPC filter:",
+        JSON.stringify(filter)
+    );
+
+
+    return await rpc(
+        "eth_getLogs",
+        [
+            filter
+        ]
     );
 
 }
 
 
-// --------------------------------------
-// Extract token address
-// --------------------------------------
+// ======================================
+// Get token address from Trade event
+// ======================================
 
 function getTokenAddress(log) {
 
@@ -141,6 +167,8 @@ function getTokenAddress(log) {
     }
 
 
+    // Make sure this is our Trade event
+
     if (
         log.topics[0].toLowerCase() !==
         TRADE_TOPIC.toLowerCase()
@@ -151,19 +179,48 @@ function getTokenAddress(log) {
     }
 
 
+    /*
+        Trade event:
+
+        Trade(
+            address indexed trader,
+            address indexed subject,
+            bool isBuy,
+            uint256 shareAmount,
+            uint256 tokenAmount,
+            uint256 supply
+        )
+
+        topics[0] = event signature
+        topics[1] = trader
+        topics[2] = subject/token
+    */
+
+
+    const subject =
+        log.topics[2];
+
+
+    if (!subject) {
+
+        return null;
+
+    }
+
+
+    // Last 40 characters = 20-byte address
+
     return (
-
         "0x" +
-        log.topics[2].slice(-40)
-
+        subject.slice(-40)
     ).toLowerCase();
 
 }
 
 
-// --------------------------------------
-// Get token information
-// --------------------------------------
+// ======================================
+// Get token metadata
+// ======================================
 
 async function getTokenInfo(address) {
 
@@ -171,9 +228,7 @@ async function getTokenInfo(address) {
 
         const response =
             await fetch(
-
                 `${EXPLORER_API}/tokens/${address}`
-
             );
 
 
@@ -226,7 +281,15 @@ async function getTokenInfo(address) {
 
         };
 
-    } catch {
+    }
+    catch (error) {
+
+        console.log(
+            "Metadata error:",
+            address,
+            error.message
+        );
+
 
         return {
 
@@ -251,9 +314,9 @@ async function getTokenInfo(address) {
 }
 
 
-// --------------------------------------
+// ======================================
 // MAIN API
-// --------------------------------------
+// ======================================
 
 export default async function handler(
     req,
@@ -261,6 +324,10 @@ export default async function handler(
 ) {
 
     try {
+
+        // --------------------------------
+        // Number of tokens requested
+        // --------------------------------
 
         const requestedLimit =
             Number(
@@ -279,20 +346,59 @@ export default async function handler(
             );
 
 
+        // --------------------------------
+        // Get latest block
+        // --------------------------------
+
         const latest =
             await getLatestBlock();
 
 
-        // When loading more, frontend sends
-        // the block where previous scan ended.
+        console.log(
+            "Latest block:",
+            latest
+        );
 
-        let endBlock =
+
+        // --------------------------------
+        // Determine where to start
+        // --------------------------------
+
+        let endBlock;
+
+
+        if (
             req.query.beforeBlock
-                ? Number(
-                    req.query.beforeBlock
-                )
-                : latest;
+        ) {
 
+            endBlock =
+                Number(
+                    req.query.beforeBlock
+                );
+
+        }
+        else {
+
+            endBlock =
+                latest;
+
+        }
+
+
+        if (
+            !Number.isFinite(endBlock) ||
+            endBlock < 0
+        ) {
+
+            endBlock =
+                latest;
+
+        }
+
+
+        // --------------------------------
+        // Store unique tokens
+        // --------------------------------
 
         const tokens =
             new Map();
@@ -306,10 +412,9 @@ export default async function handler(
             endBlock;
 
 
-        // ----------------------------------
-        // Keep scanning backwards until
-        // we find requested number of tokens
-        // ----------------------------------
+        // --------------------------------
+        // Scan backwards
+        // --------------------------------
 
         while (
             tokens.size < limit &&
@@ -319,14 +424,16 @@ export default async function handler(
             const startBlock =
                 Math.max(
                     0,
-                    endBlock - BLOCK_STEP + 1
+                    endBlock -
+                    BLOCK_STEP +
+                    1
                 );
 
 
             console.log(
                 "Scanning blocks:",
                 startBlock,
-                "-",
+                "to",
                 endBlock
             );
 
@@ -338,6 +445,12 @@ export default async function handler(
                 );
 
 
+            console.log(
+                "Trade logs found:",
+                logs.length
+            );
+
+
             scannedFrom =
                 startBlock;
 
@@ -347,7 +460,7 @@ export default async function handler(
 
 
             // --------------------------------
-            // Add unique tokens
+            // Process trade events
             // --------------------------------
 
             for (
@@ -360,9 +473,15 @@ export default async function handler(
                     );
 
 
-                if (!address)
+                if (!address) {
+
                     continue;
 
+                }
+
+
+                // We only care that
+                // at least ONE trade happened.
 
                 if (
                     !tokens.has(address)
@@ -376,14 +495,14 @@ export default async function handler(
 
                             address,
 
-                            tradeCount:
-                                1
+                            tradeCount: 1
 
                         }
 
                     );
 
-                } else {
+                }
+                else {
 
                     tokens.get(
                         address
@@ -391,6 +510,8 @@ export default async function handler(
 
                 }
 
+
+                // We have enough unique tokens
 
                 if (
                     tokens.size >=
@@ -410,8 +531,6 @@ export default async function handler(
                 startBlock - 1;
 
 
-            // Stop at genesis
-
             if (
                 startBlock === 0
             ) {
@@ -423,20 +542,25 @@ export default async function handler(
         }
 
 
-        // ----------------------------------
-        // Get token metadata
-        // ----------------------------------
+        // ==================================
+        // Get metadata
+        // ==================================
 
-        const addresses =
+        const tokenList =
             Array.from(
                 tokens.values()
             );
 
 
+        /*
+            Get metadata in parallel.
+            Maximum is 50 because limit is 50.
+        */
+
         const result =
             await Promise.all(
 
-                addresses.map(
+                tokenList.map(
                     async token => {
 
                         const info =
@@ -447,7 +571,20 @@ export default async function handler(
 
                         return {
 
-                            ...info,
+                            address:
+                                info.address,
+
+                            name:
+                                info.name,
+
+                            symbol:
+                                info.symbol,
+
+                            logo:
+                                info.logo,
+
+                            exchange_rate:
+                                info.exchange_rate,
 
                             tradeCount:
                                 token.tradeCount
@@ -460,6 +597,10 @@ export default async function handler(
             );
 
 
+        // ==================================
+        // Return result
+        // ==================================
+
         return res.status(200).json({
 
             items:
@@ -471,17 +612,20 @@ export default async function handler(
             nextBeforeBlock:
                 endBlock,
 
-            scannedFrom,
+            scannedFrom:
+                scannedFrom,
 
-            scannedTo
+            scannedTo:
+                scannedTo
 
         });
 
 
-    } catch (error) {
+    }
+    catch (error) {
 
         console.error(
-            "TOKEN API ERROR:",
+            "Sikka Token API ERROR:",
             error
         );
 
