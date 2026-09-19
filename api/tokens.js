@@ -10,15 +10,11 @@ const TRADE_TOPIC =
   "0x47d3fba33a3dd9289bb1b402a128cbea5870c35eb7e684fd999c9b02c612f3f1";
 
 const DEFAULT_LIMIT = 50;
-const MAX_LIMIT = 50;
-
-// Scan 5,000 blocks at a time
-const BLOCK_STEP = 5000;
 
 
-// --------------------------------------------------
-// Get JSON
-// --------------------------------------------------
+// ----------------------------------------------------
+// Fetch JSON
+// ----------------------------------------------------
 
 async function getJson(url) {
 
@@ -26,7 +22,7 @@ async function getJson(url) {
 
   if (!response.ok) {
     throw new Error(
-      `HTTP ${response.status}: ${url}`
+      `HTTP ${response.status}`
     );
   }
 
@@ -34,107 +30,87 @@ async function getJson(url) {
 }
 
 
-// --------------------------------------------------
-// Get latest block from Shardeum explorer
-// --------------------------------------------------
+// ----------------------------------------------------
+// Get Sikka logs from Blockscout
+// ----------------------------------------------------
 
-async function getLatestBlock() {
+async function getSikkaLogs(cursor) {
 
-  const data = await getJson(
-    `${EXPLORER_API}/blocks?type=block`
-  );
+  let url =
+    `${EXPLORER_API}/addresses/` +
+    `${SIKKA_CONTRACT}/logs`;
+
+  if (cursor) {
+
+    const params =
+      new URLSearchParams();
+
+    if (
+      cursor.block_number !== undefined
+    ) {
+      params.set(
+        "block_number",
+        cursor.block_number
+      );
+    }
+
+    if (
+      cursor.index !== undefined
+    ) {
+      params.set(
+        "index",
+        cursor.index
+      );
+    }
+
+    if (
+      cursor.items_count !== undefined
+    ) {
+      params.set(
+        "items_count",
+        cursor.items_count
+      );
+    }
+
+    url += "?" + params.toString();
+  }
+
+  return await getJson(url);
+}
+
+
+// ----------------------------------------------------
+// Check whether a log is Sikka Trade event
+// ----------------------------------------------------
+
+function isTradeLog(log) {
 
   if (
-    data &&
-    data.items &&
-    data.items.length > 0
+    !log ||
+    !log.topics ||
+    !log.topics.length
   ) {
-    return Number(data.items[0].height);
+    return false;
   }
 
-  throw new Error(
-    "Unable to determine latest block"
+  return (
+    log.topics[0].toLowerCase() ===
+    TRADE_TOPIC.toLowerCase()
   );
 }
 
 
-// --------------------------------------------------
-// Get Sikka Trade logs
-// --------------------------------------------------
-
-async function getTradeLogs(
-  fromBlock,
-  toBlock
-) {
-
-  const RPC_URL =
-    "https://api.shardeum.org";
-
-  const response = await fetch(
-    RPC_URL,
-    {
-      method: "POST",
-
-      headers: {
-        "content-type": "application/json"
-      },
-
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "eth_getLogs",
-        params: [
-          {
-            address: SIKKA_CONTRACT,
-
-            fromBlock:
-              "0x" +
-              fromBlock.toString(16),
-
-            toBlock:
-              "0x" +
-              toBlock.toString(16),
-
-            topics: [
-              TRADE_TOPIC
-            ]
-          }
-        ]
-      })
-    }
-  );
-
-  if (!response.ok) {
-    throw new Error(
-      `RPC HTTP ${response.status}`
-    );
-  }
-
-  const json =
-    await response.json();
-
-  if (json.error) {
-    throw new Error(
-      json.error.message ||
-      "RPC error"
-    );
-  }
-
-  return json.result || [];
-}
-
-
-// --------------------------------------------------
+// ----------------------------------------------------
 // Get token transfers for transaction
-// --------------------------------------------------
+// ----------------------------------------------------
 
-async function getTransactionTokenTransfers(
-  txHash
+async function getTokenTransfers(
+  transactionHash
 ) {
 
   const url =
     `${EXPLORER_API}/transactions/` +
-    `${txHash}/token-transfers?type=ERC-20`;
+    `${transactionHash}/token-transfers?type=ERC-20`;
 
   try {
 
@@ -146,8 +122,8 @@ async function getTransactionTokenTransfers(
   } catch (error) {
 
     console.log(
-      "Token transfer lookup failed:",
-      txHash,
+      "Token transfer error:",
+      transactionHash,
       error.message
     );
 
@@ -156,97 +132,77 @@ async function getTransactionTokenTransfers(
 }
 
 
-// --------------------------------------------------
-// Extract actual token from transfer
-// --------------------------------------------------
+// ----------------------------------------------------
+// Extract actual token from Blockscout transfer
+// ----------------------------------------------------
 
-function extractToken(transfer) {
+function getTokenFromTransfer(
+  transfer
+) {
 
-  // Blockscout response has token object
   if (
-    transfer &&
-    transfer.token
+    !transfer ||
+    !transfer.token ||
+    !transfer.token.address
   ) {
-
-    const token =
-      transfer.token;
-
-    if (
-      token.address
-    ) {
-
-      return {
-        address:
-          token.address.toLowerCase(),
-
-        name:
-          token.name ||
-          "Unknown Token",
-
-        symbol:
-          token.symbol ||
-          "-",
-
-        decimals:
-          token.decimals != null
-            ? Number(token.decimals)
-            : null,
-
-        logo:
-          token.icon_url ||
-          "",
-
-        exchange_rate:
-          token.exchange_rate ??
-          null
-      };
-    }
+    return null;
   }
 
-  return null;
+  const token =
+    transfer.token;
+
+  return {
+
+    address:
+      token.address.toLowerCase(),
+
+    name:
+      token.name ||
+      "Unknown Token",
+
+    symbol:
+      token.symbol ||
+      "-",
+
+    decimals:
+      token.decimals !== null &&
+      token.decimals !== undefined
+        ? Number(token.decimals)
+        : null,
+
+    logo:
+      token.icon_url ||
+      "",
+
+    exchange_rate:
+      token.exchange_rate ??
+      null
+  };
 }
 
 
-// --------------------------------------------------
-// Process Trade transactions
-// --------------------------------------------------
+// ----------------------------------------------------
+// Process transaction hashes
+// ----------------------------------------------------
 
-async function processTradeTransactions(
-  logs,
+async function processTransactions(
+  transactionHashes,
   tokenMap
 ) {
 
-  // Remove duplicate transaction hashes
-  const txHashes = [
-    ...new Set(
-      logs
-        .map(
-          log =>
-            log.transactionHash
-        )
-        .filter(Boolean)
-    )
-  ];
+  // Process only 3 at a time
+  // to keep Vercel stable.
 
-  console.log(
-    "Trade transactions:",
-    txHashes.length
-  );
-
-
-  // IMPORTANT:
-  // Only process 5 transactions at once.
-  // This keeps the Vercel function lightweight.
-  const batchSize = 5;
+  const batchSize = 3;
 
   for (
     let i = 0;
-    i < txHashes.length;
+    i < transactionHashes.length;
     i += batchSize
   ) {
 
     const batch =
-      txHashes.slice(
+      transactionHashes.slice(
         i,
         i + batchSize
       );
@@ -254,13 +210,10 @@ async function processTradeTransactions(
     const results =
       await Promise.all(
         batch.map(
-          txHash =>
-            getTransactionTokenTransfers(
-              txHash
-            )
+          hash =>
+            getTokenTransfers(hash)
         )
       );
-
 
     for (
       let j = 0;
@@ -272,12 +225,11 @@ async function processTradeTransactions(
         results[j];
 
       for (
-        const transfer
-        of transfers
+        const transfer of transfers
       ) {
 
         const token =
-          extractToken(
+          getTokenFromTransfer(
             transfer
           );
 
@@ -285,8 +237,7 @@ async function processTradeTransactions(
           continue;
         }
 
-
-        // Don't accidentally add Sikka itself
+        // Ignore Sikka itself
         if (
           token.address ===
           SIKKA_CONTRACT.toLowerCase()
@@ -294,8 +245,6 @@ async function processTradeTransactions(
           continue;
         }
 
-
-        // Existing token?
         if (
           tokenMap.has(
             token.address
@@ -324,9 +273,9 @@ async function processTradeTransactions(
 }
 
 
-// --------------------------------------------------
-// MAIN API
-// --------------------------------------------------
+// ----------------------------------------------------
+// MAIN
+// ----------------------------------------------------
 
 module.exports =
 async function handler(
@@ -345,151 +294,142 @@ async function handler(
           ),
           1
         ),
-        MAX_LIMIT
+        50
       );
-
-
-    let beforeBlock =
-      req.query.beforeBlock
-        ? Number(
-            req.query.beforeBlock
-          )
-        : null;
-
-
-    // ------------------------------------------------
-    // Get latest block
-    // ------------------------------------------------
-
-    if (
-      !beforeBlock ||
-      !Number.isFinite(
-        beforeBlock
-      )
-    ) {
-
-      beforeBlock =
-        await getLatestBlock();
-    }
 
 
     const tokenMap =
       new Map();
 
 
-    let currentToBlock =
-      beforeBlock;
+    let cursor = null;
 
-    let scannedFrom =
-      null;
+    let pagesRead = 0;
 
-    let scannedTo =
-      null;
+    let tradeTransactions = [];
+
+    let lastCursor = null;
 
 
     // ------------------------------------------------
-    // Scan backwards
+    // Read Blockscout Sikka logs
     // ------------------------------------------------
 
     while (
       tokenMap.size < limit &&
-      currentToBlock > 0
+      pagesRead < 20
     ) {
 
-      const currentFromBlock =
-        Math.max(
-          0,
-          currentToBlock -
-            BLOCK_STEP +
-            1
-        );
-
-
       console.log(
-        `Scanning ${currentFromBlock} - ${currentToBlock}`
+        "Reading Sikka log page:",
+        pagesRead + 1
       );
 
 
-      let tradeLogs = [];
-
-
-      try {
-
-        tradeLogs =
-          await getTradeLogs(
-            currentFromBlock,
-            currentToBlock
-          );
-
-      } catch (error) {
-
-        console.log(
-          "Trade log error:",
-          error.message
+      const data =
+        await getSikkaLogs(
+          cursor
         );
 
-        // Move backwards
-        currentToBlock =
-          currentFromBlock - 1;
 
-        continue;
+      const logs =
+        data.items || [];
+
+
+      console.log(
+        "Logs returned:",
+        logs.length
+      );
+
+
+      // Find Trade events
+      for (
+        const log of logs
+      ) {
+
+        if (
+          isTradeLog(log) &&
+          log.transaction_hash
+        ) {
+
+          tradeTransactions.push(
+            log.transaction_hash
+          );
+        }
+
+        // Some Blockscout versions
+        // use transactionHash.
+        else if (
+          isTradeLog(log) &&
+          log.transactionHash
+        ) {
+
+          tradeTransactions.push(
+            log.transactionHash
+          );
+        }
       }
 
 
-      scannedFrom =
-        scannedFrom === null
-          ? currentFromBlock
-          : Math.min(
-              scannedFrom,
-              currentFromBlock
-            );
-
-
-      scannedTo =
-        scannedTo === null
-          ? currentToBlock
-          : Math.max(
-              scannedTo,
-              currentToBlock
-            );
+      // Remove duplicate transactions
+      tradeTransactions =
+        [
+          ...new Set(
+            tradeTransactions
+          )
+        ];
 
 
       console.log(
-        "Trade logs found:",
-        tradeLogs.length
+        "Trade transactions:",
+        tradeTransactions.length
       );
 
 
       // ------------------------------------------------
-      // Get actual token contracts
-      // from Blockscout token transfers
+      // Process transactions found so far
       // ------------------------------------------------
 
-      await processTradeTransactions(
-        tradeLogs,
+      await processTransactions(
+        tradeTransactions,
         tokenMap
       );
 
 
-      // Move backwards
-      currentToBlock =
-        currentFromBlock - 1;
+      // ------------------------------------------------
+      // Stop if enough tokens
+      // ------------------------------------------------
 
-
-      // Safety limit
       if (
-        scannedTo -
-          scannedFrom >
-          500000
+        tokenMap.size >= limit
       ) {
-
         break;
       }
+
+
+      // ------------------------------------------------
+      // Pagination
+      // ------------------------------------------------
+
+      if (
+        !data.next_page_params
+      ) {
+        break;
+      }
+
+
+      cursor =
+        data.next_page_params;
+
+      lastCursor =
+        cursor;
+
+      pagesRead++;
     }
 
 
     // ------------------------------------------------
-    // Sort by number of Sikka trades
+    // Sort
     // ------------------------------------------------
 
     const items =
@@ -511,50 +451,45 @@ async function handler(
 
     res.setHeader(
       "Cache-Control",
-      "s-maxage=30, stale-while-revalidate=120"
+      "s-maxage=60, stale-while-revalidate=300"
     );
 
 
-    return res
-      .status(200)
-      .json({
+    return res.status(200).json({
 
-        items,
+      items,
 
-        total:
-          items.length,
+      total:
+        items.length,
 
-        nextBeforeBlock:
-          currentToBlock > 0
-            ? currentToBlock
-            : null,
+      nextCursor:
+        lastCursor,
 
-        scannedFrom,
+      pagesRead,
 
-        scannedTo,
+      tradeTransactions:
+        tradeTransactions.length,
 
-        source:
-          "Sikka Trade + Blockscout Token Transfers"
-      });
+      source:
+        "Sikka Blockscout Logs + Token Transfers"
+    });
 
 
   } catch (error) {
 
     console.error(
-      "API ERROR:",
+      "TOKEN API ERROR:",
       error
     );
 
 
-    return res
-      .status(500)
-      .json({
+    return res.status(500).json({
 
-        error:
-          error.message,
+      error:
+        error.message,
 
-        message:
-          "Token API failed"
-      });
+      message:
+        "Token API failed"
+    });
   }
 };
