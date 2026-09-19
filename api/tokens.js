@@ -4,20 +4,133 @@ const SIKKA_CONTRACT =
 const TRADE_TOPIC =
     "0xf7dd8a134438de4c59401760e24ef5c6ccc9c74583b2b022085697f3021e59768";
 
-const API =
+const RPC =
+    "https://api.shardeum.org";
+
+const EXPLORER_API =
     "https://explorer.shardeum.org/api/v2";
 
-async function getJson(url) {
-    const response = await fetch(url);
 
-    if (!response.ok) {
-        const text = await response.text();
+async function rpc(method, params) {
+
+    const response = await fetch(RPC, {
+        method: "POST",
+
+        headers: {
+            "Content-Type": "application/json"
+        },
+
+        body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method,
+            params
+        })
+    });
+
+
+    const data =
+        await response.json();
+
+
+    if (data.error) {
+
         throw new Error(
-            `Explorer API ${response.status}: ${text}`
+            data.error.message ||
+            "Shardeum RPC error"
         );
+
     }
 
-    return response.json();
+
+    return data.result;
+}
+
+
+async function getJson(url) {
+
+    const response =
+        await fetch(url);
+
+
+    const text =
+        await response.text();
+
+
+    if (!response.ok) {
+
+        throw new Error(
+            `API ${response.status}: ${text}`
+        );
+
+    }
+
+
+    return JSON.parse(text);
+}
+
+
+function parseTrade(log) {
+
+    if (!log.topics ||
+        log.topics.length < 3) {
+
+        return null;
+
+    }
+
+
+    if (
+        log.topics[0].toLowerCase() !==
+        TRADE_TOPIC.toLowerCase()
+    ) {
+
+        return null;
+
+    }
+
+
+    const subject =
+        "0x" +
+        log.topics[2].slice(-40);
+
+
+    const data =
+        (log.data || "0x").slice(2);
+
+
+    if (data.length < 64) {
+
+        return null;
+
+    }
+
+
+    const isBuy =
+        BigInt(
+            "0x" +
+            data.substring(0, 64)
+        ) === 1n;
+
+
+    return {
+
+        address:
+            subject.toLowerCase(),
+
+        isBuy,
+
+        transactionHash:
+            log.transactionHash,
+
+        blockNumber:
+            parseInt(
+                log.blockNumber,
+                16
+            )
+
+    };
+
 }
 
 
@@ -31,31 +144,88 @@ export default async function handler(req, res) {
                 .toLowerCase();
 
 
-        // Only get the first page of Sikka logs.
-        // This prevents Vercel timeout.
-        const url =
-            `${API}/addresses/${SIKKA_CONTRACT}/logs`;
+        // --------------------------------
+        // Get latest block
+        // --------------------------------
+
+        const latestHex =
+            await rpc(
+                "eth_blockNumber",
+                []
+            );
+
+
+        const latest =
+            parseInt(
+                latestHex,
+                16
+            );
 
 
         console.log(
-            "Getting Sikka logs:",
-            url
+            "Latest block:",
+            latest
         );
 
 
-        const data =
-            await getJson(url);
+        // --------------------------------
+        // Scan recent blocks
+        // --------------------------------
+        //
+        // Start with 100,000 blocks.
+        // We can expand this later.
+        //
+
+        const BLOCK_RANGE = 100000;
+
+        const fromBlock =
+            Math.max(
+                0,
+                latest - BLOCK_RANGE
+            );
+
+
+        console.log(
+            "Scanning:",
+            fromBlock,
+            "to",
+            latest
+        );
 
 
         const logs =
-            data.items || [];
+            await rpc(
+                "eth_getLogs",
+                [
+                    {
+                        address:
+                            SIKKA_CONTRACT,
+
+                        fromBlock:
+                            "0x" +
+                            fromBlock.toString(16),
+
+                        toBlock:
+                            "0x" +
+                            latest.toString(16),
+
+                        topics: [
+                            TRADE_TOPIC
+                        ]
+                    }
+                ]
+            );
 
 
         console.log(
-            "Logs received:",
+            "Trade logs:",
             logs.length
         );
 
+
+        // --------------------------------
+        // Group trades by token
+        // --------------------------------
 
         const tokenMap =
             new Map();
@@ -63,66 +233,26 @@ export default async function handler(req, res) {
 
         for (const log of logs) {
 
-            const topics =
-                log.topics || [];
+            const trade =
+                parseTrade(log);
 
 
-            // Only Trade events
-            if (
-                !topics[0] ||
-                topics[0].toLowerCase() !==
-                TRADE_TOPIC.toLowerCase()
-            ) {
-                continue;
-            }
-
-
-            if (topics.length < 3)
+            if (!trade)
                 continue;
 
 
-            // topic 2 = subject/token
-            const tokenAddress =
-                "0x" +
-                topics[2].slice(-40);
+            const address =
+                trade.address;
 
 
-            const dataHex =
-                (log.data || "0x")
-                    .slice(2);
-
-
-            if (dataHex.length < 64)
-                continue;
-
-
-            // First 32-byte word = isBuy
-            const isBuy =
-                BigInt(
-                    "0x" +
-                    dataHex.substring(
-                        0,
-                        64
-                    )
-                ) === 1n;
-
-
-            const key =
-                tokenAddress.toLowerCase();
-
-
-            if (!tokenMap.has(key)) {
+            if (!tokenMap.has(address)) {
 
                 tokenMap.set(
-                    key,
+                    address,
                     {
-                        address:
-                            tokenAddress,
-
+                        address,
                         buys: 0,
-
                         sells: 0,
-
                         trades: 0
                     }
                 );
@@ -131,10 +261,10 @@ export default async function handler(req, res) {
 
 
             const token =
-                tokenMap.get(key);
+                tokenMap.get(address);
 
 
-            if (isBuy) {
+            if (trade.isBuy) {
 
                 token.buys++;
 
@@ -157,33 +287,13 @@ export default async function handler(req, res) {
 
 
         // --------------------------------
-        // Search by contract address
-        // --------------------------------
-
-        if (search) {
-
-            tokens =
-                tokens.filter(
-                    token =>
-                        token.address
-                            .toLowerCase()
-                            .includes(search)
-                );
-
-        }
-
-
-        // --------------------------------
-        // Get metadata
+        // Fetch metadata
         // --------------------------------
 
         const result = [];
 
 
-        // IMPORTANT:
-        // Only fetch metadata for a small
-        // number of tokens per request.
-
+        // Limit metadata calls initially
         for (
             const token of tokens.slice(0, 30)
         ) {
@@ -192,7 +302,7 @@ export default async function handler(req, res) {
 
                 const metadata =
                     await getJson(
-                        `${API}/tokens/${token.address}`
+                        `${EXPLORER_API}/tokens/${token.address}`
                     );
 
 
@@ -228,10 +338,8 @@ export default async function handler(req, res) {
 
                 });
 
-            } catch (e) {
 
-                // Still return the token
-                // if metadata is unavailable.
+            } catch (error) {
 
                 result.push({
 
@@ -267,7 +375,7 @@ export default async function handler(req, res) {
 
 
         // --------------------------------
-        // Search name / symbol
+        // Search
         // --------------------------------
 
         let finalResult =
@@ -308,8 +416,14 @@ export default async function handler(req, res) {
             total:
                 finalResult.length,
 
-            scannedLogs:
-                logs.length
+            tradeLogs:
+                logs.length,
+
+            scannedFrom:
+                fromBlock,
+
+            scannedTo:
+                latest
 
         });
 
@@ -317,7 +431,7 @@ export default async function handler(req, res) {
     } catch (error) {
 
         console.error(
-            "Sikka API ERROR:",
+            "Sikka Trade API ERROR:",
             error
         );
 
@@ -325,7 +439,7 @@ export default async function handler(req, res) {
         return res.status(500).json({
 
             error:
-                "Sikka API failed",
+                "Sikka Trade API failed",
 
             details:
                 error.message
