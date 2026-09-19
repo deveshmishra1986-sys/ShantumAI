@@ -10,10 +10,18 @@ const RPC =
 const EXPLORER_API =
     "https://explorer.shardeum.org/api/v2";
 
+const BLOCK_STEP = 5000;
+const DEFAULT_LIMIT = 50;
+
+
+// --------------------------------------
+// JSON RPC
+// --------------------------------------
 
 async function rpc(method, params) {
 
     const response = await fetch(RPC, {
+
         method: "POST",
 
         headers: {
@@ -21,11 +29,17 @@ async function rpc(method, params) {
         },
 
         body: JSON.stringify({
+
             jsonrpc: "2.0",
+
             id: 1,
+
             method,
+
             params
+
         })
+
     });
 
 
@@ -37,43 +51,90 @@ async function rpc(method, params) {
 
         throw new Error(
             data.error.message ||
-            "Shardeum RPC error"
+            "RPC error"
         );
 
     }
 
 
     return data.result;
+
 }
 
 
-async function getJson(url) {
+// --------------------------------------
+// Get latest block
+// --------------------------------------
 
-    const response =
-        await fetch(url);
+async function getLatestBlock() {
 
-
-    const text =
-        await response.text();
-
-
-    if (!response.ok) {
-
-        throw new Error(
-            `API ${response.status}: ${text}`
+    const result =
+        await rpc(
+            "eth_blockNumber",
+            []
         );
 
-    }
+    return parseInt(
+        result,
+        16
+    );
 
-
-    return JSON.parse(text);
 }
 
 
-function parseTrade(log) {
+// --------------------------------------
+// Get Sikka Trade logs
+// --------------------------------------
 
-    if (!log.topics ||
-        log.topics.length < 3) {
+async function getTradeLogs(
+    fromBlock,
+    toBlock
+) {
+
+    return await rpc(
+
+        "eth_getLogs",
+
+        [
+
+            {
+
+                address:
+                    SIKKA_CONTRACT,
+
+                fromBlock:
+                    "0x" +
+                    fromBlock.toString(16),
+
+                toBlock:
+                    "0x" +
+                    toBlock.toString(16),
+
+                topics: [
+
+                    TRADE_TOPIC
+
+                ]
+
+            }
+
+        ]
+
+    );
+
+}
+
+
+// --------------------------------------
+// Extract token address
+// --------------------------------------
+
+function getTokenAddress(log) {
+
+    if (
+        !log.topics ||
+        log.topics.length < 3
+    ) {
 
         return null;
 
@@ -90,340 +151,329 @@ function parseTrade(log) {
     }
 
 
-    const subject =
+    return (
+
         "0x" +
-        log.topics[2].slice(-40);
+        log.topics[2].slice(-40)
 
-
-    const data =
-        (log.data || "0x").slice(2);
-
-
-    if (data.length < 64) {
-
-        return null;
-
-    }
-
-
-    const isBuy =
-        BigInt(
-            "0x" +
-            data.substring(0, 64)
-        ) === 1n;
-
-
-    return {
-
-        address:
-            subject.toLowerCase(),
-
-        isBuy,
-
-        transactionHash:
-            log.transactionHash,
-
-        blockNumber:
-            parseInt(
-                log.blockNumber,
-                16
-            )
-
-    };
+    ).toLowerCase();
 
 }
 
 
-export default async function handler(req, res) {
+// --------------------------------------
+// Get token information
+// --------------------------------------
+
+async function getTokenInfo(address) {
 
     try {
 
-        const search =
-            (req.query.q || "")
-                .trim()
-                .toLowerCase();
+        const response =
+            await fetch(
+
+                `${EXPLORER_API}/tokens/${address}`
+
+            );
 
 
-        // --------------------------------
-        // Get latest block
-        // --------------------------------
+        if (!response.ok) {
 
-        const latestHex =
-            await rpc(
-                "eth_blockNumber",
-                []
+            return {
+
+                address,
+
+                name:
+                    "Unknown Token",
+
+                symbol:
+                    "-",
+
+                logo:
+                    "",
+
+                exchange_rate:
+                    null
+
+            };
+
+        }
+
+
+        const data =
+            await response.json();
+
+
+        return {
+
+            address,
+
+            name:
+                data.name ||
+                "Unknown Token",
+
+            symbol:
+                data.symbol ||
+                "-",
+
+            logo:
+                data.icon_url ||
+                "",
+
+            exchange_rate:
+                data.exchange_rate ||
+                null
+
+        };
+
+    } catch {
+
+        return {
+
+            address,
+
+            name:
+                "Unknown Token",
+
+            symbol:
+                "-",
+
+            logo:
+                "",
+
+            exchange_rate:
+                null
+
+        };
+
+    }
+
+}
+
+
+// --------------------------------------
+// MAIN API
+// --------------------------------------
+
+export default async function handler(
+    req,
+    res
+) {
+
+    try {
+
+        const requestedLimit =
+            Number(
+                req.query.limit ||
+                DEFAULT_LIMIT
+            );
+
+
+        const limit =
+            Math.min(
+                Math.max(
+                    requestedLimit,
+                    1
+                ),
+                50
             );
 
 
         const latest =
-            parseInt(
-                latestHex,
-                16
-            );
+            await getLatestBlock();
 
 
-        console.log(
-            "Latest block:",
-            latest
-        );
+        // When loading more, frontend sends
+        // the block where previous scan ended.
+
+        let endBlock =
+            req.query.beforeBlock
+                ? Number(
+                    req.query.beforeBlock
+                )
+                : latest;
 
 
-        // --------------------------------
-        // Scan recent blocks
-        // --------------------------------
-        //
-        // Start with 100,000 blocks.
-        // We can expand this later.
-        //
-
-        const BLOCK_RANGE = 100000;
-
-        const fromBlock =
-            Math.max(
-                0,
-                latest - BLOCK_RANGE
-            );
-
-
-        console.log(
-            "Scanning:",
-            fromBlock,
-            "to",
-            latest
-        );
-
-
-        const logs =
-            await rpc(
-                "eth_getLogs",
-                [
-                    {
-                        address:
-                            SIKKA_CONTRACT,
-
-                        fromBlock:
-                            "0x" +
-                            fromBlock.toString(16),
-
-                        toBlock:
-                            "0x" +
-                            latest.toString(16),
-
-                        topics: [
-                            TRADE_TOPIC
-                        ]
-                    }
-                ]
-            );
-
-
-        console.log(
-            "Trade logs:",
-            logs.length
-        );
-
-
-        // --------------------------------
-        // Group trades by token
-        // --------------------------------
-
-        const tokenMap =
+        const tokens =
             new Map();
 
 
-        for (const log of logs) {
-
-            const trade =
-                parseTrade(log);
+        let scannedFrom =
+            endBlock;
 
 
-            if (!trade)
-                continue;
+        let scannedTo =
+            endBlock;
 
 
-            const address =
-                trade.address;
+        // ----------------------------------
+        // Keep scanning backwards until
+        // we find requested number of tokens
+        // ----------------------------------
 
+        while (
+            tokens.size < limit &&
+            endBlock > 0
+        ) {
 
-            if (!tokenMap.has(address)) {
-
-                tokenMap.set(
-                    address,
-                    {
-                        address,
-                        buys: 0,
-                        sells: 0,
-                        trades: 0
-                    }
+            const startBlock =
+                Math.max(
+                    0,
+                    endBlock - BLOCK_STEP + 1
                 );
 
-            }
 
-
-            const token =
-                tokenMap.get(address);
-
-
-            if (trade.isBuy) {
-
-                token.buys++;
-
-            } else {
-
-                token.sells++;
-
-            }
-
-
-            token.trades++;
-
-        }
-
-
-        let tokens =
-            Array.from(
-                tokenMap.values()
+            console.log(
+                "Scanning blocks:",
+                startBlock,
+                "-",
+                endBlock
             );
 
 
-        // --------------------------------
-        // Fetch metadata
-        // --------------------------------
+            const logs =
+                await getTradeLogs(
+                    startBlock,
+                    endBlock
+                );
 
-        const result = [];
+
+            scannedFrom =
+                startBlock;
 
 
-        // Limit metadata calls initially
-        for (
-            const token of tokens.slice(0, 30)
-        ) {
+            scannedTo =
+                endBlock;
 
-            try {
 
-                const metadata =
-                    await getJson(
-                        `${EXPLORER_API}/tokens/${token.address}`
+            // --------------------------------
+            // Add unique tokens
+            // --------------------------------
+
+            for (
+                const log of logs
+            ) {
+
+                const address =
+                    getTokenAddress(
+                        log
                     );
 
 
-                result.push({
-
-                    address:
-                        token.address,
-
-                    name:
-                        metadata.name ||
-                        "Unknown Token",
-
-                    symbol:
-                        metadata.symbol ||
-                        "-",
-
-                    logo:
-                        metadata.icon_url ||
-                        "",
-
-                    exchange_rate:
-                        metadata.exchange_rate ||
-                        null,
-
-                    buys:
-                        token.buys,
-
-                    sells:
-                        token.sells,
-
-                    trades:
-                        token.trades
-
-                });
+                if (!address)
+                    continue;
 
 
-            } catch (error) {
+                if (
+                    !tokens.has(address)
+                ) {
 
-                result.push({
+                    tokens.set(
 
-                    address:
-                        token.address,
+                        address,
 
-                    name:
-                        "Unknown Token",
+                        {
 
-                    symbol:
-                        "-",
+                            address,
 
-                    logo:
-                        "",
+                            tradeCount:
+                                1
 
-                    exchange_rate:
-                        null,
+                        }
 
-                    buys:
-                        token.buys,
+                    );
 
-                    sells:
-                        token.sells,
+                } else {
 
-                    trades:
-                        token.trades
+                    tokens.get(
+                        address
+                    ).tradeCount++;
 
-                });
+                }
+
+
+                if (
+                    tokens.size >=
+                    limit
+                ) {
+
+                    break;
+
+                }
+
+            }
+
+
+            // Move backwards
+
+            endBlock =
+                startBlock - 1;
+
+
+            // Stop at genesis
+
+            if (
+                startBlock === 0
+            ) {
+
+                break;
 
             }
 
         }
 
 
-        // --------------------------------
-        // Search
-        // --------------------------------
+        // ----------------------------------
+        // Get token metadata
+        // ----------------------------------
 
-        let finalResult =
-            result;
+        const addresses =
+            Array.from(
+                tokens.values()
+            );
 
 
-        if (search) {
+        const result =
+            await Promise.all(
 
-            finalResult =
-                result.filter(
-                    token =>
+                addresses.map(
+                    async token => {
 
-                        token.address
-                            .toLowerCase()
-                            .includes(search)
+                        const info =
+                            await getTokenInfo(
+                                token.address
+                            );
 
-                        ||
 
-                        token.name
-                            .toLowerCase()
-                            .includes(search)
+                        return {
 
-                        ||
+                            ...info,
 
-                        token.symbol
-                            .toLowerCase()
-                            .includes(search)
-                );
+                            tradeCount:
+                                token.tradeCount
 
-        }
+                        };
+
+                    }
+                )
+
+            );
 
 
         return res.status(200).json({
 
             items:
-                finalResult,
+                result,
 
             total:
-                finalResult.length,
+                result.length,
 
-            tradeLogs:
-                logs.length,
+            nextBeforeBlock:
+                endBlock,
 
-            scannedFrom:
-                fromBlock,
+            scannedFrom,
 
-            scannedTo:
-                latest
+            scannedTo
 
         });
 
@@ -431,7 +481,7 @@ export default async function handler(req, res) {
     } catch (error) {
 
         console.error(
-            "Sikka Trade API ERROR:",
+            "TOKEN API ERROR:",
             error
         );
 
@@ -439,7 +489,7 @@ export default async function handler(req, res) {
         return res.status(500).json({
 
             error:
-                "Sikka Trade API failed",
+                "Unable to load traded tokens",
 
             details:
                 error.message
