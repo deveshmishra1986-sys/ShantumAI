@@ -1,6 +1,5 @@
-const SIКKA_CONTRACT =
+const SIKKA_CONTRACT =
   "0xa1aAd2ED952C64248de99dD4D82ae07b87033bfa";
-
 const BLOCKSCOUT_API =
   "https://explorer.shardeum.org/api/v2";
 
