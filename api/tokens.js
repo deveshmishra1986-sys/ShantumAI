@@ -10,6 +10,10 @@ const TRADE_TOPIC =
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 50;
 
+// Number of Blockscout log pages to inspect.
+// Increase later if necessary.
+const MAX_LOG_PAGES = 10;
+
 
 // --------------------------------------------------
 // Fetch JSON
@@ -17,11 +21,9 @@ const MAX_LIMIT = 50;
 
 async function getJson(url) {
 
-  const response =
-    await fetch(url);
+  const response = await fetch(url);
 
-  const text =
-    await response.text();
+  const text = await response.text();
 
   if (!response.ok) {
     throw new Error(
@@ -40,42 +42,80 @@ async function getJson(url) {
 
 
 // --------------------------------------------------
-// Get Sikka contract logs
+// Get Sikka logs
 // --------------------------------------------------
 
-async function getSikkaLogs() {
+async function getSikkaLogs(cursor = null) {
 
-  const url =
+  let url =
     `${EXPLORER_API}/addresses/` +
     `${SIKKA_CONTRACT}/logs`;
+
+  if (cursor) {
+
+    const params =
+      new URLSearchParams();
+
+    if (
+      cursor.block_number !== undefined &&
+      cursor.block_number !== null
+    ) {
+      params.set(
+        "block_number",
+        cursor.block_number
+      );
+    }
+
+    if (
+      cursor.index !== undefined &&
+      cursor.index !== null
+    ) {
+      params.set(
+        "index",
+        cursor.index
+      );
+    }
+
+    if (
+      cursor.items_count !== undefined &&
+      cursor.items_count !== null
+    ) {
+      params.set(
+        "items_count",
+        cursor.items_count
+      );
+    }
+
+    url += `?${params.toString()}`;
+  }
 
   return await getJson(url);
 }
 
 
 // --------------------------------------------------
-// Check Trade event
+// Is this a Sikka Trade event?
 // --------------------------------------------------
 
 function isTradeLog(log) {
 
   if (
     !log ||
-    !log.topics ||
-    !log.topics.length
+    !Array.isArray(log.topics) ||
+    log.topics.length === 0
   ) {
     return false;
   }
 
   return (
     log.topics[0].toLowerCase() ===
-    TRADE_TOPIC
+    TRADE_TOPIC.toLowerCase()
   );
 }
 
 
 // --------------------------------------------------
-// Get token transfers
+// Get token transfers for transaction
 // --------------------------------------------------
 
 async function getTokenTransfers(
@@ -84,7 +124,7 @@ async function getTokenTransfers(
 
   const url =
     `${EXPLORER_API}/transactions/` +
-    `${transactionHash}/token-transfers`;
+    `${transactionHash}/token-transfers?type=ERC-20`;
 
   try {
 
@@ -107,12 +147,10 @@ async function getTokenTransfers(
 
 
 // --------------------------------------------------
-// Convert Blockscout token
+// Convert token information
 // --------------------------------------------------
 
-function convertToken(
-  transfer
-) {
+function convertToken(transfer) {
 
   if (
     !transfer ||
@@ -129,10 +167,9 @@ function convertToken(
     token.address.toLowerCase();
 
 
-  // Never include Sikka itself
+  // Never show Sikka itself
   if (
-    address ===
-    SIKKA_CONTRACT
+    address === SIKKA_CONTRACT
   ) {
     return null;
   }
@@ -180,7 +217,141 @@ function convertToken(
 
 
 // --------------------------------------------------
-// MAIN
+// Process transactions
+// --------------------------------------------------
+
+async function processTransactions(
+  transactionHashes,
+  tokenMap
+) {
+
+  // Don't process the same transaction twice.
+  const uniqueHashes =
+    [
+      ...new Set(
+        transactionHashes
+      )
+    ];
+
+
+  // Process a few at a time.
+  const batchSize = 5;
+
+
+  for (
+    let i = 0;
+    i < uniqueHashes.length;
+    i += batchSize
+  ) {
+
+    const batch =
+      uniqueHashes.slice(
+        i,
+        i + batchSize
+      );
+
+
+    const results =
+      await Promise.all(
+        batch.map(
+          hash =>
+            getTokenTransfers(hash)
+        )
+      );
+
+
+    for (
+      let j = 0;
+      j < results.length;
+      j++
+    ) {
+
+      const transfers =
+        results[j];
+
+      const transactionHash =
+        batch[j];
+
+
+      // Keep track of tokens found in THIS
+      // transaction only.
+      //
+      // This prevents the two STM minting
+      // transfers in one transaction from
+      // being counted as two trades.
+
+      const tokensInThisTrade =
+        new Set();
+
+
+      for (
+        const transfer
+        of transfers
+      ) {
+
+        const token =
+          convertToken(
+            transfer
+          );
+
+
+        if (!token) {
+          continue;
+        }
+
+
+        if (
+          tokensInThisTrade.has(
+            token.address
+          )
+        ) {
+          continue;
+        }
+
+
+        tokensInThisTrade.add(
+          token.address
+        );
+
+
+        if (
+          tokenMap.has(
+            token.address
+          )
+        ) {
+
+          const existing =
+            tokenMap.get(
+              token.address
+            );
+
+          existing.tradeCount += 1;
+
+        } else {
+
+          token.tradeCount = 1;
+
+          tokenMap.set(
+            token.address,
+            token
+          );
+        }
+      }
+
+
+      console.log(
+        "Processed trade:",
+        transactionHash,
+        "tokens:",
+        tokensInThisTrade.size
+      );
+    }
+  }
+}
+
+
+// --------------------------------------------------
+// MAIN API
 // --------------------------------------------------
 
 export default async function handler(
@@ -203,172 +374,154 @@ export default async function handler(
       );
 
 
-    // ------------------------------------------------
-    // Get Sikka logs
-    // ------------------------------------------------
-
-    const logData =
-      await getSikkaLogs();
-
-
-    const logs =
-      logData.items || [];
-
-
-    console.log(
-      "Sikka logs:",
-      logs.length
-    );
-
-
-    // ------------------------------------------------
-    // Find Trade transactions
-    // ------------------------------------------------
-
-    const transactions = [];
-
-
-    for (
-      const log of logs
-    ) {
-
-      if (
-        !isTradeLog(log)
-      ) {
-        continue;
-      }
-
-
-      const txHash =
-        log.transaction_hash ||
-        log.transactionHash;
-
-
-      if (
-        txHash
-      ) {
-
-        transactions.push(
-          txHash
-        );
-      }
-    }
-
-
-    // Remove duplicate transactions
-
-    const uniqueTransactions =
-      [
-        ...new Set(
-          transactions
-        )
-      ];
-
-
-    console.log(
-      "Trade transactions:",
-      uniqueTransactions.length
-    );
-
-
-    // ------------------------------------------------
-    // Token map
-    // ------------------------------------------------
-
     const tokenMap =
       new Map();
 
 
+    let cursor = null;
+
+    let pagesRead = 0;
+
+    let totalTradeTransactions = 0;
+
+
     // ------------------------------------------------
-    // Process transactions
+    // Read multiple pages of Sikka logs
     // ------------------------------------------------
 
-    const batchSize = 3;
-
-
-    for (
-      let i = 0;
-
-      i < uniqueTransactions.length;
-
-      i += batchSize
+    while (
+      tokenMap.size < limit &&
+      pagesRead < MAX_LOG_PAGES
     ) {
 
-      const batch =
-        uniqueTransactions.slice(
-          i,
-          i + batchSize
+      console.log(
+        "Reading Sikka log page:",
+        pagesRead + 1
+      );
+
+
+      const logData =
+        await getSikkaLogs(
+          cursor
         );
 
 
-      const results =
-        await Promise.all(
-          batch.map(
-            tx =>
-              getTokenTransfers(tx)
-          )
-        );
+      const logs =
+        logData.items || [];
+
+
+      console.log(
+        "Logs on page:",
+        logs.length
+      );
+
+
+      // ------------------------------------------------
+      // Find Trade transactions
+      // ------------------------------------------------
+
+      const tradeTransactions =
+        [];
 
 
       for (
-        const transfers
-        of results
+        const log of logs
       ) {
 
-        for (
-          const transfer
-          of transfers
+        if (
+          !isTradeLog(log)
+        ) {
+          continue;
+        }
+
+
+        const txHash =
+          log.transaction_hash ||
+          log.transactionHash;
+
+
+        if (
+          txHash
         ) {
 
-          const token =
-            convertToken(
-              transfer
-            );
-
-
-          if (!token) {
-            continue;
-          }
-
-
-          if (
-            tokenMap.has(
-              token.address
-            )
-          ) {
-
-            const existing =
-              tokenMap.get(
-                token.address
-              );
-
-            existing.tradeCount += 1;
-
-          } else {
-
-            token.tradeCount = 1;
-
-            tokenMap.set(
-              token.address,
-              token
-            );
-          }
+          tradeTransactions.push(
+            txHash
+          );
         }
       }
 
 
-      // Stop once we have enough tokens
+      const uniqueTrades =
+        [
+          ...new Set(
+            tradeTransactions
+          )
+        ];
+
+
+      console.log(
+        "Trade transactions on page:",
+        uniqueTrades.length
+      );
+
+
+      totalTradeTransactions +=
+        uniqueTrades.length;
+
+
+      // ------------------------------------------------
+      // Get actual token contracts
+      // ------------------------------------------------
+
+      await processTransactions(
+        uniqueTrades,
+        tokenMap
+      );
+
+
+      console.log(
+        "Unique tokens so far:",
+        tokenMap.size
+      );
+
+
+      // ------------------------------------------------
+      // Enough tokens?
+      // ------------------------------------------------
 
       if (
         tokenMap.size >= limit
       ) {
         break;
       }
+
+
+      // ------------------------------------------------
+      // Get next page
+      // ------------------------------------------------
+
+      if (
+        !logData.next_page_params
+      ) {
+
+        console.log(
+          "No more Sikka log pages."
+        );
+
+        break;
+      }
+
+
+      cursor =
+        logData.next_page_params;
+
+
+      pagesRead++;
     }
 
 
     // ------------------------------------------------
-    // Sort tokens
+    // Sort by number of trades
     // ------------------------------------------------
 
     const items =
@@ -406,7 +559,13 @@ export default async function handler(
         items.length,
 
       tradeTransactions:
-        uniqueTransactions.length,
+        totalTradeTransactions,
+
+      pagesRead,
+
+      hasMore:
+        !!cursor &&
+        items.length >= limit,
 
       source:
         "Sikka Trade + Blockscout"
