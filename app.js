@@ -71,11 +71,29 @@ async function loadTokens(reset = false) {
 
         const newTokens = data.items || [];
 
-        state.tokens = [
-            ...state.tokens,
-            ...newTokens
-        ];
+     const combined = [
+    ...state.tokens,
+    ...newTokens
+];
 
+// Remove duplicate contract addresses
+const unique = new Map();
+
+combined.forEach(token => {
+
+    const address = (
+        token.address_hash ||
+        token.address ||
+        ""
+    ).toLowerCase();
+
+    if (address) {
+        unique.set(address, token);
+    }
+
+});
+
+state.tokens = Array.from(unique.values());
         // IMPORTANT: save next page cursor
         state.nextPageParams =
             data.next_page_params || null;
