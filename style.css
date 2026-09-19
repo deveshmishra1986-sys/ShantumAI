@@ -16,6 +16,8 @@ main {
   padding: 30px 0 60px;
 }
 
+/* HEADER */
+
 header {
   display: flex;
   justify-content: space-between;
@@ -78,112 +80,147 @@ header p {
   margin: 15px 0 25px;
 }
 
-/* TOKEN GRID */
+/* =========================
+   TOKEN GRID
+   ========================= */
 
 .grid {
   display: grid !important;
   grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
   gap: 22px !important;
-  align-items: stretch;
+  width: 100%;
 }
 
-/* TOKEN CARD */
+/*
+   IMPORTANT:
+   Style EVERY direct child of grid.
 
-.grid .token-card {
-  display: block !important;
-  width: 100%;
-  min-width: 0;
-  min-height: 300px;
+   This works even if app.js doesn't
+   add the token-card class.
+*/
+
+.grid > div {
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 300px !important;
+
   padding: 22px !important;
 
   background: #11182c !important;
   border: 1px solid #293653 !important;
   border-radius: 18px !important;
 
-  overflow: hidden;
-  color: #ffffff;
+  color: #ffffff !important;
+
+  overflow: hidden !important;
 
   box-shadow: 0 5px 20px rgba(0, 0, 0, 0.25);
+
+  display: block !important;
+
+  position: relative;
 }
 
-.grid .token-card:hover {
+/* CARD HOVER */
+
+.grid > div:hover {
   border-color: #6746f5 !important;
+  transform: translateY(-2px);
 }
 
-/* LOGO */
+/* =========================
+   TOKEN LOGO
+   ========================= */
 
 .token-logo {
-  width: 52px;
-  height: 52px;
-  margin-bottom: 18px;
+  width: 54px !important;
+  height: 54px !important;
+  margin-bottom: 18px !important;
 }
 
 .token-logo img,
 .token-placeholder {
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
+  width: 54px !important;
+  height: 54px !important;
+  border-radius: 50% !important;
+}
+
+.token-logo img {
+  display: block;
+  object-fit: cover;
 }
 
 .token-placeholder {
-  display: flex;
+  display: flex !important;
   align-items: center;
   justify-content: center;
-  background: #6746f5;
+  background: #6746f5 !important;
+  color: white !important;
   font-size: 20px;
   font-weight: bold;
 }
 
-/* TOKEN TEXT */
+/* =========================
+   TOKEN INFO
+   ========================= */
 
 .token-info {
-  width: 100%;
-  min-width: 0;
+  width: 100% !important;
+  min-width: 0 !important;
 }
 
 .token-info h3 {
-  margin: 0 0 8px;
-  font-size: 19px;
-  line-height: 1.35;
-  word-break: break-word;
+  margin: 0 0 8px !important;
+  font-size: 19px !important;
+  line-height: 1.35 !important;
+  word-break: break-word !important;
 }
 
 .symbol {
-  color: #929db8;
-  font-size: 14px;
-  margin-bottom: 20px;
+  color: #929db8 !important;
+  font-size: 14px !important;
+  margin-bottom: 22px !important;
 }
 
 .price {
-  font-size: 17px;
-  margin-bottom: 12px;
+  font-size: 17px !important;
+  margin-bottom: 12px !important;
 }
 
 .holders,
 .trades {
-  color: #b9c2d6;
-  font-size: 14px;
-  margin-bottom: 7px;
+  color: #b9c2d6 !important;
+  font-size: 14px !important;
+  margin-bottom: 7px !important;
 }
 
-/* CONTRACT ADDRESS */
+/* =========================
+   CONTRACT ADDRESS
+   ========================= */
 
 .address {
-  width: 100%;
-  margin-top: 16px;
-  padding-top: 12px;
+  display: block !important;
 
-  border-top: 1px solid #293653;
+  width: 100% !important;
 
-  color: #7f8aa5;
-  font-size: 11px;
+  margin-top: 16px !important;
+  padding-top: 12px !important;
 
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  border-top: 1px solid #293653 !important;
+
+  color: #7f8aa5 !important;
+
+  font-size: 11px !important;
+  line-height: 1.5 !important;
+
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
 }
 
-/* LOAD MORE */
+/* =========================
+   LOAD MORE
+   ========================= */
 
 .more {
   display: block;
@@ -217,14 +254,21 @@ footer {
 /* TABLET */
 
 @media (max-width: 1100px) {
+
   .grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    grid-template-columns:
+      repeat(3, minmax(0, 1fr)) !important;
   }
 }
 
 /* MOBILE */
 
 @media (max-width: 750px) {
+
+  main {
+    width: 92%;
+  }
+
   header {
     flex-direction: column;
     align-items: flex-start;
@@ -237,6 +281,10 @@ footer {
 
   .controls {
     flex-direction: column;
+  }
+
+  #search {
+    width: 100%;
   }
 
   #refresh {
