@@ -1,236 +1,560 @@
 // api/tokens.js
 
-const RPC_URL = "https://api.shardeum.org";
+const EXPLORER_API =
+  "https://explorer.shardeum.org/api/v2";
 
-const TRANSFER_TOPIC =
-  "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+const SIKKA_CONTRACT =
+  "0xa1aAd2ED952C64248de99dD4D82ae07b87033bfa";
 
-const SHANTUM_TX =
-  "0x6d372e3d993ddb281c749811f0323b4da7e79a0e75ab81905c1c97aa2cd71f92";
+const TRADE_TOPIC =
+  "0x47d3fba33a3dd9289bb1b402a128cbea5870c35eb7e684fd999c9b02c612f3f1";
 
-async function rpc(method, params) {
-  const response = await fetch(RPC_URL, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json"
-    },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: 1,
-      method,
-      params
-    })
-  });
+const DEFAULT_LIMIT = 50;
+const MAX_LIMIT = 50;
 
-  const data = await response.json();
+// Scan 5,000 blocks at a time
+const BLOCK_STEP = 5000;
 
-  if (data.error) {
-    throw new Error(data.error.message);
-  }
 
-  return data.result;
-}
+// --------------------------------------------------
+// Get JSON
+// --------------------------------------------------
 
-function decodeString(data) {
-  if (!data || data === "0x") {
-    return null;
-  }
+async function getJson(url) {
 
-  try {
-    const hex = data.slice(2);
+  const response = await fetch(url);
 
-    // Standard ABI string
-    if (hex.length >= 128) {
-      const offset = parseInt(hex.slice(0, 64), 16);
-
-      const lengthPosition = offset * 2;
-
-      const length = parseInt(
-        hex.slice(
-          lengthPosition,
-          lengthPosition + 64
-        ),
-        16
-      );
-
-      const start = lengthPosition + 64;
-      const end = start + length * 2;
-
-      if (end <= hex.length) {
-        return Buffer.from(
-          hex.slice(start, end),
-          "hex"
-        )
-          .toString("utf8")
-          .replace(/\0/g, "")
-          .trim();
-      }
-    }
-
-    // bytes32
-    return Buffer.from(
-      hex.slice(0, 64),
-      "hex"
-    )
-      .toString("utf8")
-      .replace(/\0/g, "")
-      .trim();
-
-  } catch (e) {
-    return null;
-  }
-}
-
-async function getMetadata(address) {
-  const result = {
-    address,
-    name: null,
-    symbol: null,
-    decimals: null
-  };
-
-  try {
-    const name = await rpc("eth_call", [
-      {
-        to: address,
-        data: "0x06fdde03"
-      },
-      "latest"
-    ]);
-
-    result.name = decodeString(name);
-  } catch (e) {
-    result.nameError = e.message;
-  }
-
-  try {
-    const symbol = await rpc("eth_call", [
-      {
-        to: address,
-        data: "0x95d89b41"
-      },
-      "latest"
-    ]);
-
-    result.symbol = decodeString(symbol);
-  } catch (e) {
-    result.symbolError = e.message;
-  }
-
-  try {
-    const decimals = await rpc("eth_call", [
-      {
-        to: address,
-        data: "0x313ce567"
-      },
-      "latest"
-    ]);
-
-    if (decimals && decimals !== "0x") {
-      result.decimals = parseInt(
-        decimals,
-        16
-      );
-    }
-  } catch (e) {
-    result.decimalsError = e.message;
-  }
-
-  return result;
-}
-
-module.exports = async function handler(req, res) {
-  try {
-
-    // ---------------------------------------------
-    // 1. Get Shantum transaction receipt
-    // ---------------------------------------------
-
-    const receipt = await rpc(
-      "eth_getTransactionReceipt",
-      [SHANTUM_TX]
+  if (!response.ok) {
+    throw new Error(
+      `HTTP ${response.status}: ${url}`
     );
+  }
 
-    if (!receipt) {
-      return res.status(404).json({
-        error: "Transaction receipt not found"
-      });
+  return await response.json();
+}
+
+
+// --------------------------------------------------
+// Get latest block from Shardeum explorer
+// --------------------------------------------------
+
+async function getLatestBlock() {
+
+  const data = await getJson(
+    `${EXPLORER_API}/blocks?type=block`
+  );
+
+  if (
+    data &&
+    data.items &&
+    data.items.length > 0
+  ) {
+    return Number(data.items[0].height);
+  }
+
+  throw new Error(
+    "Unable to determine latest block"
+  );
+}
+
+
+// --------------------------------------------------
+// Get Sikka Trade logs
+// --------------------------------------------------
+
+async function getTradeLogs(
+  fromBlock,
+  toBlock
+) {
+
+  const RPC_URL =
+    "https://api.shardeum.org";
+
+  const response = await fetch(
+    RPC_URL,
+    {
+      method: "POST",
+
+      headers: {
+        "content-type": "application/json"
+      },
+
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "eth_getLogs",
+        params: [
+          {
+            address: SIKKA_CONTRACT,
+
+            fromBlock:
+              "0x" +
+              fromBlock.toString(16),
+
+            toBlock:
+              "0x" +
+              toBlock.toString(16),
+
+            topics: [
+              TRADE_TOPIC
+            ]
+          }
+        ]
+      })
     }
+  );
 
-    // ---------------------------------------------
-    // 2. Find ERC20 Transfer logs
-    // ---------------------------------------------
+  if (!response.ok) {
+    throw new Error(
+      `RPC HTTP ${response.status}`
+    );
+  }
 
-    const transfers = [];
+  const json =
+    await response.json();
 
-    for (const log of receipt.logs || []) {
+  if (json.error) {
+    throw new Error(
+      json.error.message ||
+      "RPC error"
+    );
+  }
 
-      if (
-        log.topics &&
-        log.topics[0] &&
-        log.topics[0].toLowerCase() ===
-          TRANSFER_TOPIC.toLowerCase()
-      ) {
+  return json.result || [];
+}
 
-        transfers.push({
-          tokenContract: log.address,
-          from:
-            "0x" +
-            log.topics[1].slice(-40),
-          to:
-            "0x" +
-            log.topics[2].slice(-40),
-          value: log.data
-        });
-      }
-    }
 
-    // ---------------------------------------------
-    // 3. Get unique token contracts
-    // ---------------------------------------------
+// --------------------------------------------------
+// Get token transfers for transaction
+// --------------------------------------------------
 
-    const addresses = [
-      ...new Set(
-        transfers.map(x =>
-          x.tokenContract.toLowerCase()
-        )
-      )
-    ];
+async function getTransactionTokenTransfers(
+  txHash
+) {
 
-    // ---------------------------------------------
-    // 4. Read metadata
-    // ---------------------------------------------
+  const url =
+    `${EXPLORER_API}/transactions/` +
+    `${txHash}/token-transfers?type=ERC-20`;
 
-    const tokens = [];
+  try {
 
-    for (const address of addresses) {
-      const metadata =
-        await getMetadata(address);
+    const data =
+      await getJson(url);
 
-      tokens.push(metadata);
-    }
-
-    return res.status(200).json({
-      transaction: SHANTUM_TX,
-
-      receiptBlock: receipt.blockNumber,
-
-      transferCount: transfers.length,
-
-      transfers,
-
-      tokenContracts: addresses,
-
-      tokens
-    });
+    return data.items || [];
 
   } catch (error) {
 
-    console.error(error);
+    console.log(
+      "Token transfer lookup failed:",
+      txHash,
+      error.message
+    );
 
-    return res.status(500).json({
-      error: error.message,
-      stack: error.stack
-    });
+    return [];
+  }
+}
+
+
+// --------------------------------------------------
+// Extract actual token from transfer
+// --------------------------------------------------
+
+function extractToken(transfer) {
+
+  // Blockscout response has token object
+  if (
+    transfer &&
+    transfer.token
+  ) {
+
+    const token =
+      transfer.token;
+
+    if (
+      token.address
+    ) {
+
+      return {
+        address:
+          token.address.toLowerCase(),
+
+        name:
+          token.name ||
+          "Unknown Token",
+
+        symbol:
+          token.symbol ||
+          "-",
+
+        decimals:
+          token.decimals != null
+            ? Number(token.decimals)
+            : null,
+
+        logo:
+          token.icon_url ||
+          "",
+
+        exchange_rate:
+          token.exchange_rate ??
+          null
+      };
+    }
+  }
+
+  return null;
+}
+
+
+// --------------------------------------------------
+// Process Trade transactions
+// --------------------------------------------------
+
+async function processTradeTransactions(
+  logs,
+  tokenMap
+) {
+
+  // Remove duplicate transaction hashes
+  const txHashes = [
+    ...new Set(
+      logs
+        .map(
+          log =>
+            log.transactionHash
+        )
+        .filter(Boolean)
+    )
+  ];
+
+  console.log(
+    "Trade transactions:",
+    txHashes.length
+  );
+
+
+  // IMPORTANT:
+  // Only process 5 transactions at once.
+  // This keeps the Vercel function lightweight.
+  const batchSize = 5;
+
+  for (
+    let i = 0;
+    i < txHashes.length;
+    i += batchSize
+  ) {
+
+    const batch =
+      txHashes.slice(
+        i,
+        i + batchSize
+      );
+
+    const results =
+      await Promise.all(
+        batch.map(
+          txHash =>
+            getTransactionTokenTransfers(
+              txHash
+            )
+        )
+      );
+
+
+    for (
+      let j = 0;
+      j < results.length;
+      j++
+    ) {
+
+      const transfers =
+        results[j];
+
+      for (
+        const transfer
+        of transfers
+      ) {
+
+        const token =
+          extractToken(
+            transfer
+          );
+
+        if (!token) {
+          continue;
+        }
+
+
+        // Don't accidentally add Sikka itself
+        if (
+          token.address ===
+          SIKKA_CONTRACT.toLowerCase()
+        ) {
+          continue;
+        }
+
+
+        // Existing token?
+        if (
+          tokenMap.has(
+            token.address
+          )
+        ) {
+
+          const existing =
+            tokenMap.get(
+              token.address
+            );
+
+          existing.tradeCount += 1;
+
+        } else {
+
+          token.tradeCount = 1;
+
+          tokenMap.set(
+            token.address,
+            token
+          );
+        }
+      }
+    }
+  }
+}
+
+
+// --------------------------------------------------
+// MAIN API
+// --------------------------------------------------
+
+module.exports =
+async function handler(
+  req,
+  res
+) {
+
+  try {
+
+    const limit =
+      Math.min(
+        Math.max(
+          parseInt(
+            req.query.limit ||
+            DEFAULT_LIMIT
+          ),
+          1
+        ),
+        MAX_LIMIT
+      );
+
+
+    let beforeBlock =
+      req.query.beforeBlock
+        ? Number(
+            req.query.beforeBlock
+          )
+        : null;
+
+
+    // ------------------------------------------------
+    // Get latest block
+    // ------------------------------------------------
+
+    if (
+      !beforeBlock ||
+      !Number.isFinite(
+        beforeBlock
+      )
+    ) {
+
+      beforeBlock =
+        await getLatestBlock();
+    }
+
+
+    const tokenMap =
+      new Map();
+
+
+    let currentToBlock =
+      beforeBlock;
+
+    let scannedFrom =
+      null;
+
+    let scannedTo =
+      null;
+
+
+    // ------------------------------------------------
+    // Scan backwards
+    // ------------------------------------------------
+
+    while (
+      tokenMap.size < limit &&
+      currentToBlock > 0
+    ) {
+
+      const currentFromBlock =
+        Math.max(
+          0,
+          currentToBlock -
+            BLOCK_STEP +
+            1
+        );
+
+
+      console.log(
+        `Scanning ${currentFromBlock} - ${currentToBlock}`
+      );
+
+
+      let tradeLogs = [];
+
+
+      try {
+
+        tradeLogs =
+          await getTradeLogs(
+            currentFromBlock,
+            currentToBlock
+          );
+
+      } catch (error) {
+
+        console.log(
+          "Trade log error:",
+          error.message
+        );
+
+        // Move backwards
+        currentToBlock =
+          currentFromBlock - 1;
+
+        continue;
+      }
+
+
+      scannedFrom =
+        scannedFrom === null
+          ? currentFromBlock
+          : Math.min(
+              scannedFrom,
+              currentFromBlock
+            );
+
+
+      scannedTo =
+        scannedTo === null
+          ? currentToBlock
+          : Math.max(
+              scannedTo,
+              currentToBlock
+            );
+
+
+      console.log(
+        "Trade logs found:",
+        tradeLogs.length
+      );
+
+
+      // ------------------------------------------------
+      // Get actual token contracts
+      // from Blockscout token transfers
+      // ------------------------------------------------
+
+      await processTradeTransactions(
+        tradeLogs,
+        tokenMap
+      );
+
+
+      // Move backwards
+      currentToBlock =
+        currentFromBlock - 1;
+
+
+      // Safety limit
+      if (
+        scannedTo -
+          scannedFrom >
+          500000
+      ) {
+
+        break;
+      }
+    }
+
+
+    // ------------------------------------------------
+    // Sort by number of Sikka trades
+    // ------------------------------------------------
+
+    const items =
+      [...tokenMap.values()]
+        .sort(
+          (a, b) =>
+            b.tradeCount -
+            a.tradeCount
+        )
+        .slice(
+          0,
+          limit
+        );
+
+
+    // ------------------------------------------------
+    // Response
+    // ------------------------------------------------
+
+    res.setHeader(
+      "Cache-Control",
+      "s-maxage=30, stale-while-revalidate=120"
+    );
+
+
+    return res
+      .status(200)
+      .json({
+
+        items,
+
+        total:
+          items.length,
+
+        nextBeforeBlock:
+          currentToBlock > 0
+            ? currentToBlock
+            : null,
+
+        scannedFrom,
+
+        scannedTo,
+
+        source:
+          "Sikka Trade + Blockscout Token Transfers"
+      });
+
+
+  } catch (error) {
+
+    console.error(
+      "API ERROR:",
+      error
+    );
+
+
+    return res
+      .status(500)
+      .json({
+
+        error:
+          error.message,
+
+        message:
+          "Token API failed"
+      });
   }
 };
