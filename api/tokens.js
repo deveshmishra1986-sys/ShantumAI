@@ -16,7 +16,7 @@ const DEFAULT_LIMIT = 50;
 
 
 // ======================================
-// Convert number to valid even-length HEX
+// HEX HELPER
 // ======================================
 
 function toEvenHex(number) {
@@ -25,10 +25,7 @@ function toEvenHex(number) {
         Number(number).toString(16);
 
     if (hex.length % 2 !== 0) {
-
-        hex =
-            "0" + hex;
-
+        hex = "0" + hex;
     }
 
     return "0x" + hex;
@@ -36,35 +33,26 @@ function toEvenHex(number) {
 
 
 // ======================================
-// Shardeum RPC
+// RPC CALL
 // ======================================
 
 async function rpc(method, params) {
 
     const response =
-        await fetch(
-            RPC,
-            {
-                method: "POST",
+        await fetch(RPC, {
+            method: "POST",
 
-                headers: {
-                    "Content-Type":
-                        "application/json"
-                },
+            headers: {
+                "Content-Type": "application/json"
+            },
 
-                body: JSON.stringify({
-
-                    jsonrpc: "2.0",
-
-                    id: 1,
-
-                    method,
-
-                    params
-
-                })
-            }
-        );
+            body: JSON.stringify({
+                jsonrpc: "2.0",
+                id: 1,
+                method,
+                params
+            })
+        });
 
 
     const data =
@@ -86,7 +74,53 @@ async function rpc(method, params) {
 
 
 // ======================================
-// Get latest Shardeum block
+// BATCH RPC CALL
+// ======================================
+
+async function rpcBatch(requests) {
+
+    if (!requests.length) {
+        return [];
+    }
+
+
+    const response =
+        await fetch(RPC, {
+
+            method: "POST",
+
+            headers: {
+                "Content-Type":
+                    "application/json"
+            },
+
+            body: JSON.stringify(
+                requests
+            )
+
+        });
+
+
+    const data =
+        await response.json();
+
+
+    if (!Array.isArray(data)) {
+
+        throw new Error(
+            "Shardeum RPC did not return batch response"
+        );
+
+    }
+
+
+    return data;
+
+}
+
+
+// ======================================
+// LATEST BLOCK
 // ======================================
 
 async function getLatestBlock() {
@@ -107,7 +141,7 @@ async function getLatestBlock() {
 
 
 // ======================================
-// Get Sikka Trade events
+// GET SIKKA TRADE LOGS
 // ======================================
 
 async function getTradeLogs(
@@ -127,32 +161,22 @@ async function getTradeLogs(
             toEvenHex(toBlock),
 
         topics: [
-
             TRADE_TOPIC
-
         ]
 
     };
 
 
-    console.log(
-        "RPC filter:",
-        JSON.stringify(filter)
-    );
-
-
     return await rpc(
         "eth_getLogs",
-        [
-            filter
-        ]
+        [filter]
     );
 
 }
 
 
 // ======================================
-// Get token address from Trade event
+// GET TOKEN ADDRESS FROM TRADE
 // ======================================
 
 function getTokenAddress(log) {
@@ -167,8 +191,6 @@ function getTokenAddress(log) {
     }
 
 
-    // Make sure this is our Trade event
-
     if (
         log.topics[0].toLowerCase() !==
         TRADE_TOPIC.toLowerCase()
@@ -179,36 +201,14 @@ function getTokenAddress(log) {
     }
 
 
-    /*
-        Trade event:
-
-        Trade(
-            address indexed trader,
-            address indexed subject,
-            bool isBuy,
-            uint256 shareAmount,
-            uint256 tokenAmount,
-            uint256 supply
-        )
-
-        topics[0] = event signature
-        topics[1] = trader
-        topics[2] = subject/token
-    */
-
-
     const subject =
         log.topics[2];
 
 
     if (!subject) {
-
         return null;
-
     }
 
-
-    // Last 40 characters = 20-byte address
 
     return (
         "0x" +
@@ -219,10 +219,391 @@ function getTokenAddress(log) {
 
 
 // ======================================
-// Get token metadata
+// DECODE ERC20 STRING
 // ======================================
 
-async function getTokenInfo(address) {
+function decodeString(hex) {
+
+    if (
+        !hex ||
+        hex === "0x"
+    ) {
+
+        return "";
+
+    }
+
+
+    try {
+
+        let data =
+            hex.startsWith("0x")
+                ? hex.slice(2)
+                : hex;
+
+
+        // Dynamic ABI string
+
+        if (data.length >= 128) {
+
+            const offset =
+                parseInt(
+                    data.slice(0, 64),
+                    16
+                );
+
+
+            if (
+                offset * 2 + 64 <=
+                data.length
+            ) {
+
+                const length =
+                    parseInt(
+                        data.slice(
+                            offset * 2,
+                            offset * 2 + 64
+                        ),
+                        16
+                    );
+
+
+                const start =
+                    offset * 2 + 64;
+
+
+                const end =
+                    start + length * 2;
+
+
+                if (
+                    end <= data.length
+                ) {
+
+                    const bytes =
+                        data.slice(
+                            start,
+                            end
+                        );
+
+
+                    return hexToUtf8(
+                        bytes
+                    );
+
+                }
+
+            }
+
+        }
+
+
+        // bytes32 fallback
+
+        if (data.length >= 64) {
+
+            const bytes =
+                data.slice(0, 64)
+                    .replace(
+                        /00+$/,
+                        ""
+                    );
+
+
+            return hexToUtf8(
+                bytes
+            );
+
+        }
+
+
+    } catch (error) {
+
+        console.log(
+            "String decode error:",
+            error.message
+        );
+
+    }
+
+
+    return "";
+
+}
+
+
+// ======================================
+// HEX → UTF8
+// ======================================
+
+function hexToUtf8(hex) {
+
+    try {
+
+        const bytes = [];
+
+        for (
+            let i = 0;
+            i < hex.length;
+            i += 2
+        ) {
+
+            const value =
+                parseInt(
+                    hex.substring(
+                        i,
+                        i + 2
+                    ),
+                    16
+                );
+
+
+            if (
+                value !== 0 &&
+                !Number.isNaN(value)
+            ) {
+
+                bytes.push(value);
+
+            }
+
+        }
+
+
+        return new TextDecoder()
+            .decode(
+                new Uint8Array(bytes)
+            )
+            .replace(
+                /\0/g,
+                ""
+            )
+            .trim();
+
+    } catch {
+
+        return "";
+
+    }
+
+}
+
+
+// ======================================
+// DIRECT TOKEN METADATA
+// ======================================
+
+async function getDirectTokenMetadata(
+    addresses
+) {
+
+    const requests = [];
+
+    let id = 1000;
+
+
+    for (
+        const address of addresses
+    ) {
+
+        // name()
+        requests.push({
+
+            jsonrpc: "2.0",
+
+            id: id++,
+
+            method: "eth_call",
+
+            params: [
+                {
+                    to: address,
+                    data: "0x06fdde03"
+                },
+                "latest"
+            ]
+
+        });
+
+
+        // symbol()
+        requests.push({
+
+            jsonrpc: "2.0",
+
+            id: id++,
+
+            method: "eth_call",
+
+            params: [
+                {
+                    to: address,
+                    data: "0x95d89b41"
+                },
+                "latest"
+            ]
+
+        });
+
+
+        // decimals()
+        requests.push({
+
+            jsonrpc: "2.0",
+
+            id: id++,
+
+            method: "eth_call",
+
+            params: [
+                {
+                    to: address,
+                    data: "0x313ce567"
+                },
+                "latest"
+            ]
+
+        });
+
+    }
+
+
+    if (!requests.length) {
+        return new Map();
+    }
+
+
+    const responses =
+        await rpcBatch(
+            requests
+        );
+
+
+    const responseMap =
+        new Map();
+
+
+    for (
+        const response of responses
+    ) {
+
+        responseMap.set(
+            response.id,
+            response
+        );
+
+    }
+
+
+    const result =
+        new Map();
+
+
+    let currentId =
+        1000;
+
+
+    for (
+        const address of addresses
+    ) {
+
+        const nameResponse =
+            responseMap.get(
+                currentId++
+            );
+
+
+        const symbolResponse =
+            responseMap.get(
+                currentId++
+            );
+
+
+        const decimalsResponse =
+            responseMap.get(
+                currentId++
+            );
+
+
+        let name = "";
+
+        let symbol = "";
+
+        let decimals = null;
+
+
+        if (
+            nameResponse &&
+            nameResponse.result
+        ) {
+
+            name =
+                decodeString(
+                    nameResponse.result
+                );
+
+        }
+
+
+        if (
+            symbolResponse &&
+            symbolResponse.result
+        ) {
+
+            symbol =
+                decodeString(
+                    symbolResponse.result
+                );
+
+        }
+
+
+        if (
+            decimalsResponse &&
+            decimalsResponse.result
+        ) {
+
+            try {
+
+                decimals =
+                    parseInt(
+                        decimalsResponse.result,
+                        16
+                    );
+
+            } catch {
+
+                decimals = null;
+
+            }
+
+        }
+
+
+        result.set(
+            address.toLowerCase(),
+            {
+                name,
+                symbol,
+                decimals
+            }
+        );
+
+    }
+
+
+    return result;
+
+}
+
+
+// ======================================
+// EXPLORER METADATA
+// ======================================
+
+async function getExplorerMetadata(
+    address
+) {
 
     try {
 
@@ -234,23 +615,7 @@ async function getTokenInfo(address) {
 
         if (!response.ok) {
 
-            return {
-
-                address,
-
-                name:
-                    "Unknown Token",
-
-                symbol:
-                    "-",
-
-                logo:
-                    "",
-
-                exchange_rate:
-                    null
-
-            };
+            return null;
 
         }
 
@@ -261,18 +626,15 @@ async function getTokenInfo(address) {
 
         return {
 
-            address,
-
             name:
-                data.name ||
-                "Unknown Token",
+                data.name || "",
 
             symbol:
-                data.symbol ||
-                "-",
+                data.symbol || "",
 
             logo:
                 data.icon_url ||
+                data.logo_url ||
                 "",
 
             exchange_rate:
@@ -281,33 +643,9 @@ async function getTokenInfo(address) {
 
         };
 
-    }
-    catch (error) {
+    } catch {
 
-        console.log(
-            "Metadata error:",
-            address,
-            error.message
-        );
-
-
-        return {
-
-            address,
-
-            name:
-                "Unknown Token",
-
-            symbol:
-                "-",
-
-            logo:
-                "",
-
-            exchange_rate:
-                null
-
-        };
+        return null;
 
     }
 
@@ -324,10 +662,6 @@ export default async function handler(
 ) {
 
     try {
-
-        // --------------------------------
-        // Number of tokens requested
-        // --------------------------------
 
         const requestedLimit =
             Number(
@@ -347,21 +681,15 @@ export default async function handler(
 
 
         // --------------------------------
-        // Get latest block
+        // Latest block
         // --------------------------------
 
         const latest =
             await getLatestBlock();
 
 
-        console.log(
-            "Latest block:",
-            latest
-        );
-
-
         // --------------------------------
-        // Determine where to start
+        // Starting block
         // --------------------------------
 
         let endBlock;
@@ -376,8 +704,7 @@ export default async function handler(
                     req.query.beforeBlock
                 );
 
-        }
-        else {
+        } else {
 
             endBlock =
                 latest;
@@ -386,8 +713,7 @@ export default async function handler(
 
 
         if (
-            !Number.isFinite(endBlock) ||
-            endBlock < 0
+            !Number.isFinite(endBlock)
         ) {
 
             endBlock =
@@ -397,7 +723,7 @@ export default async function handler(
 
 
         // --------------------------------
-        // Store unique tokens
+        // Unique tokens
         // --------------------------------
 
         const tokens =
@@ -413,7 +739,7 @@ export default async function handler(
 
 
         // --------------------------------
-        // Scan backwards
+        // Scan Sikka trades
         // --------------------------------
 
         while (
@@ -431,7 +757,7 @@ export default async function handler(
 
 
             console.log(
-                "Scanning blocks:",
+                "Scanning:",
                 startBlock,
                 "to",
                 endBlock
@@ -445,12 +771,6 @@ export default async function handler(
                 );
 
 
-            console.log(
-                "Trade logs found:",
-                logs.length
-            );
-
-
             scannedFrom =
                 startBlock;
 
@@ -459,12 +779,15 @@ export default async function handler(
                 endBlock;
 
 
-            // --------------------------------
-            // Process trade events
-            // --------------------------------
+            // Reverse so recent
+            // events are processed first
+
+            const reversedLogs =
+                [...logs].reverse();
+
 
             for (
-                const log of logs
+                const log of reversedLogs
             ) {
 
                 const address =
@@ -474,35 +797,23 @@ export default async function handler(
 
 
                 if (!address) {
-
                     continue;
-
                 }
 
-
-                // We only care that
-                // at least ONE trade happened.
 
                 if (
                     !tokens.has(address)
                 ) {
 
                     tokens.set(
-
                         address,
-
                         {
-
                             address,
-
                             tradeCount: 1
-
                         }
-
                     );
 
-                }
-                else {
+                } else {
 
                     tokens.get(
                         address
@@ -510,8 +821,6 @@ export default async function handler(
 
                 }
 
-
-                // We have enough unique tokens
 
                 if (
                     tokens.size >=
@@ -524,8 +833,6 @@ export default async function handler(
 
             }
 
-
-            // Move backwards
 
             endBlock =
                 startBlock - 1;
@@ -542,64 +849,104 @@ export default async function handler(
         }
 
 
-        // ==================================
-        // Get metadata
-        // ==================================
+        // --------------------------------
+        // Token addresses
+        // --------------------------------
 
-        const tokenList =
+        const addresses =
             Array.from(
-                tokens.values()
+                tokens.keys()
             );
 
 
-        /*
-            Get metadata in parallel.
-            Maximum is 50 because limit is 50.
-        */
+        // --------------------------------
+        // Get direct ERC20 metadata
+        // --------------------------------
 
-        const result =
-            await Promise.all(
-
-                tokenList.map(
-                    async token => {
-
-                        const info =
-                            await getTokenInfo(
-                                token.address
-                            );
-
-
-                        return {
-
-                            address:
-                                info.address,
-
-                            name:
-                                info.name,
-
-                            symbol:
-                                info.symbol,
-
-                            logo:
-                                info.logo,
-
-                            exchange_rate:
-                                info.exchange_rate,
-
-                            tradeCount:
-                                token.tradeCount
-
-                        };
-
-                    }
-                )
-
+        const directMetadata =
+            await getDirectTokenMetadata(
+                addresses
             );
 
 
-        // ==================================
-        // Return result
-        // ==================================
+        // --------------------------------
+        // Build final results
+        // --------------------------------
+
+        const result = [];
+
+
+        for (
+            const token of
+            tokens.values()
+        ) {
+
+            const address =
+                token.address;
+
+
+            const direct =
+                directMetadata.get(
+                    address
+                ) || {};
+
+
+            // Try explorer metadata
+            const explorer =
+                await getExplorerMetadata(
+                    address
+                );
+
+
+            const name =
+                direct.name ||
+                explorer?.name ||
+                "Unknown Token";
+
+
+            const symbol =
+                direct.symbol ||
+                explorer?.symbol ||
+                "-";
+
+
+            const logo =
+                explorer?.logo ||
+                "";
+
+
+            const exchangeRate =
+                explorer?.exchange_rate ||
+                null;
+
+
+            result.push({
+
+                address,
+
+                name,
+
+                symbol,
+
+                logo,
+
+                exchange_rate:
+                    exchangeRate,
+
+                decimals:
+                    direct.decimals,
+
+                tradeCount:
+                    token.tradeCount
+
+            });
+
+        }
+
+
+        // --------------------------------
+        // Response
+        // --------------------------------
 
         return res.status(200).json({
 
@@ -612,17 +959,14 @@ export default async function handler(
             nextBeforeBlock:
                 endBlock,
 
-            scannedFrom:
-                scannedFrom,
+            scannedFrom,
 
-            scannedTo:
-                scannedTo
+            scannedTo
 
         });
 
 
-    }
-    catch (error) {
+    } catch (error) {
 
         console.error(
             "Sikka Token API ERROR:",
