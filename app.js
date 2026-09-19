@@ -2,6 +2,8 @@ const state = {
 
     tokens: [],
 
+    nextBeforeBlock: null,
+
     loading: false
 
 };
@@ -23,11 +25,11 @@ const moreButton =
     document.getElementById("more");
 
 
-// ---------------------------------------
+// --------------------------------------
 // LOAD TOKENS
-// ---------------------------------------
+// --------------------------------------
 
-async function loadTokens() {
+async function loadTokens(reset = false) {
 
     if (state.loading)
         return;
@@ -36,36 +38,40 @@ async function loadTokens() {
     state.loading = true;
 
 
-    const search =
-        searchInput.value.trim();
+    if (reset) {
+
+        state.tokens = [];
+
+        state.nextBeforeBlock = null;
+
+        grid.innerHTML = "";
+
+    }
 
 
     status.textContent =
-        search
-            ? `Searching for "${search}"...`
-            : "Loading Sikka traded tokens...";
-
-
-    grid.innerHTML = "";
+        "Loading traded tokens...";
 
 
     try {
 
         let url =
-            "/api/tokens";
+            "/api/tokens?limit=50";
 
 
-        if (search) {
+        if (
+            state.nextBeforeBlock !== null
+        ) {
 
             url +=
-                "?q=" +
-                encodeURIComponent(search);
+                "&beforeBlock=" +
+                state.nextBeforeBlock;
 
         }
 
 
         console.log(
-            "Request:",
+            "Loading:",
             url
         );
 
@@ -78,39 +84,74 @@ async function loadTokens() {
             await response.json();
 
 
-        console.log(
-            "Response:",
-            data
-        );
-
-
         if (!response.ok) {
 
             throw new Error(
                 data.details ||
                 data.error ||
-                `HTTP ${response.status}`
+                "API error"
             );
 
         }
 
 
-        state.tokens =
+        const newTokens =
             data.items || [];
+
+
+        // --------------------------------
+        // Remove duplicate addresses
+        // --------------------------------
+
+        const map =
+            new Map();
+
+
+        [
+            ...state.tokens,
+            ...newTokens
+        ]
+            .forEach(token => {
+
+                map.set(
+                    token.address.toLowerCase(),
+                    token
+                );
+
+            });
+
+
+        state.tokens =
+            Array.from(
+                map.values()
+            );
+
+
+        state.nextBeforeBlock =
+            data.nextBeforeBlock;
 
 
         renderTokens();
 
 
-        if (search) {
+        status.textContent =
+            `Showing ${state.tokens.length} traded tokens`;
 
-            status.textContent =
-                `${state.tokens.length} token(s) found`;
+
+        // Hide Load More if no more data
+
+        if (
+            !newTokens.length ||
+            data.nextBeforeBlock <= 0
+        ) {
+
+            moreButton.hidden =
+                true;
 
         } else {
 
-            status.textContent =
-                `${state.tokens.length} Sikka traded token(s)`;
+            moreButton.hidden =
+                false;
 
         }
 
@@ -124,7 +165,6 @@ async function loadTokens() {
             "Could not load tokens: " +
             error.message;
 
-
     } finally {
 
         state.loading = false;
@@ -134,9 +174,9 @@ async function loadTokens() {
 }
 
 
-// ---------------------------------------
+// --------------------------------------
 // RENDER
-// ---------------------------------------
+// --------------------------------------
 
 function renderTokens() {
 
@@ -163,7 +203,7 @@ function renderTokens() {
         token => {
 
             const address =
-                token.address || "";
+                token.address;
 
 
             const name =
@@ -208,20 +248,17 @@ function renderTokens() {
             if (logo) {
 
                 logoHTML =
-
                     `
                     <img
                         class="logo"
                         src="${escapeHtml(logo)}"
                         alt="${escapeHtml(symbol)}"
-                        onerror="this.style.display='none'"
                     >
                     `;
 
             } else {
 
                 logoHTML =
-
                     `
                     <div class="logo placeholder">
                         ${escapeHtml(
@@ -265,26 +302,16 @@ function renderTokens() {
 
                 <div class="trade-info">
 
-                    <span>
-                        🟢 Buys:
-                        ${token.buys || 0}
-                    </span>
-
-                    <span>
-                        🔴 Sells:
-                        ${token.sells || 0}
-                    </span>
-
-                    <span>
-                        📊 Trades:
-                        ${token.trades || 0}
-                    </span>
+                    📊 Trades:
+                    ${token.tradeCount || 1}
 
                 </div>
 
 
                 <div class="address">
+
                     ${shortAddress(address)}
+
                 </div>
 
 
@@ -307,38 +334,233 @@ function renderTokens() {
 }
 
 
-// ---------------------------------------
-// ADDRESS
-// ---------------------------------------
+// --------------------------------------
+// SEARCH
+// --------------------------------------
 
-function shortAddress(address) {
-
-    if (!address)
-        return "";
+let searchTimer;
 
 
-    if (address.length < 20)
-        return address;
+searchInput.addEventListener(
+    "input",
+    () => {
+
+        clearTimeout(
+            searchTimer
+        );
 
 
-    return (
+        searchTimer =
+            setTimeout(
+                () => {
 
-        address.substring(0, 10) +
+                    const text =
+                        searchInput.value
+                            .trim()
+                            .toLowerCase();
 
-        "..." +
 
-        address.substring(
-            address.length - 6
-        )
+                    if (!text) {
 
+                        renderTokens();
+
+                        return;
+
+                    }
+
+
+                    const filtered =
+                        state.tokens.filter(
+                            token =>
+
+                                token.name
+                                    .toLowerCase()
+                                    .includes(text)
+
+                                ||
+
+                                token.symbol
+                                    .toLowerCase()
+                                    .includes(text)
+
+                                ||
+
+                                token.address
+                                    .toLowerCase()
+                                    .includes(text)
+
+                        );
+
+
+                    renderFiltered(
+                        filtered
+                    );
+
+                },
+                300
+            );
+
+    }
+);
+
+
+// --------------------------------------
+// FILTERED RENDER
+// --------------------------------------
+
+function renderFiltered(tokens) {
+
+    grid.innerHTML = "";
+
+
+    if (!tokens.length) {
+
+        grid.innerHTML =
+            `
+            <div class="empty">
+                Token not found in loaded tokens.
+            </div>
+            `;
+
+        return;
+
+    }
+
+
+    tokens.forEach(
+        token => {
+
+            const address =
+                token.address;
+
+
+            const card =
+                document.createElement(
+                    "article"
+                );
+
+
+            card.className =
+                "card";
+
+
+            card.innerHTML =
+
+                `
+
+                <div class="token-top">
+
+                    <div class="logo placeholder">
+
+                        ${escapeHtml(
+                            (
+                                token.symbol ||
+                                "?"
+                            )
+                                .charAt(0)
+                                .toUpperCase()
+                        )}
+
+                    </div>
+
+                    <div>
+
+                        <h2>
+                            ${escapeHtml(
+                                token.name
+                            )}
+                        </h2>
+
+                        <div class="symbol">
+                            ${escapeHtml(
+                                token.symbol
+                            )}
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <div class="trade-info">
+
+                    📊 Trades:
+                    ${token.tradeCount || 1}
+
+                </div>
+
+
+                <div class="address">
+
+                    ${shortAddress(address)}
+
+                </div>
+
+
+                <a
+                    href="https://explorer.shardeum.org/token/${address}"
+                    target="_blank"
+                >
+                    View on explorer ↗
+                </a>
+
+                `;
+
+
+            grid.appendChild(card);
+
+        }
     );
 
 }
 
 
-// ---------------------------------------
-// HTML SECURITY
-// ---------------------------------------
+// --------------------------------------
+// REFRESH
+// --------------------------------------
+
+refreshButton.addEventListener(
+    "click",
+    () => {
+
+        searchInput.value = "";
+
+        loadTokens(true);
+
+    }
+);
+
+
+// --------------------------------------
+// LOAD MORE
+// --------------------------------------
+
+moreButton.addEventListener(
+    "click",
+    () => {
+
+        loadTokens(false);
+
+    }
+);
+
+
+// --------------------------------------
+// HELPERS
+// --------------------------------------
+
+function shortAddress(address) {
+
+    return (
+        address.substring(0, 10) +
+        "..." +
+        address.substring(
+            address.length - 6
+        )
+    );
+
+}
+
 
 function escapeHtml(value) {
 
@@ -372,63 +594,8 @@ function escapeHtml(value) {
 }
 
 
-// ---------------------------------------
-// SEARCH
-// ---------------------------------------
-
-let searchTimer;
-
-
-searchInput.addEventListener(
-    "input",
-    () => {
-
-        clearTimeout(
-            searchTimer
-        );
-
-
-        searchTimer =
-            setTimeout(
-                () => {
-
-                    loadTokens();
-
-                },
-                500
-            );
-
-    }
-);
-
-
-// ---------------------------------------
-// REFRESH
-// ---------------------------------------
-
-refreshButton.addEventListener(
-    "click",
-    () => {
-
-        loadTokens();
-
-    }
-);
-
-
-// ---------------------------------------
-// LOAD MORE
-// ---------------------------------------
-
-// Not required anymore because
-// the API builds the complete traded
-// token list.
-
-moreButton.hidden = true;
-
-
-// ---------------------------------------
+// --------------------------------------
 // START
-// ---------------------------------------
+// --------------------------------------
 
-loadTokens();
+loadTokens(true);
