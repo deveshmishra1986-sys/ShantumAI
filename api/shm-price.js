@@ -1,10 +1,12 @@
 export default async function handler(req, res) {
   try {
-    const url =
-      "https://pro-api.coinmarketcap.com/public-api/v2/simple/price" +
-      "?symbol=SHM&convert=USD";
+    // Step 1:
+    // Ask CMC for the current Shardeum listing by slug.
+    const mapUrl =
+      "https://pro-api.coinmarketcap.com/public-api/v1/cryptocurrency/map" +
+      "?slug=shardeum-new";
 
-    const response = await fetch(url, {
+    const mapResponse = await fetch(mapUrl, {
       method: "GET",
       headers: {
         Accept: "application/json"
@@ -12,82 +14,91 @@ export default async function handler(req, res) {
       cache: "no-store"
     });
 
-    const data = await response.json();
+    const mapData = await mapResponse.json();
 
     console.log(
-      "CoinMarketCap response:",
-      JSON.stringify(data)
+      "CMC MAP:",
+      JSON.stringify(mapData)
     );
 
-    // Show CMC's real error instead of only "HTTP 400"
-    if (!response.ok) {
-      return res.status(response.status).json({
+    if (!mapResponse.ok) {
+      return res.status(mapResponse.status).json({
         success: false,
-        error: `CoinMarketCap HTTP ${response.status}`,
-        cmcError:
-          data?.status?.error_message ||
-          data?.status?.error_code ||
-          "Unknown CoinMarketCap error",
-        details: data
+        step: "map",
+        error: `CoinMarketCap HTTP ${mapResponse.status}`,
+        details: mapData
       });
     }
 
-    /*
-      CMC v2 Simple Price response can be
-      keyed by the requested symbol.
-    */
+    const coin =
+      mapData?.data?.find(
+        item =>
+          String(item?.symbol || "").toUpperCase() === "SHM"
+      );
+
+    if (!coin) {
+      return res.status(404).json({
+        success: false,
+        step: "find-shm",
+        error: "Shardeum (New) was not found",
+        details: mapData
+      });
+    }
+
+    const id = coin.id;
+
+    // Step 2:
+    // Get current price using the actual CMC ID.
+    const priceUrl =
+      "https://pro-api.coinmarketcap.com/public-api/v1/simple/price" +
+      `?ids=${id}&convert=USD`;
+
+    const priceResponse = await fetch(priceUrl, {
+      method: "GET",
+      headers: {
+        Accept: "application/json"
+      },
+      cache: "no-store"
+    });
+
+    const priceData =
+      await priceResponse.json();
+
+    console.log(
+      "CMC PRICE:",
+      JSON.stringify(priceData)
+    );
+
+    if (!priceResponse.ok) {
+      return res.status(priceResponse.status).json({
+        success: false,
+        step: "price",
+        error: `CoinMarketCap HTTP ${priceResponse.status}`,
+        coinId: id,
+        coin: coin,
+        details: priceData
+      });
+    }
 
     const result =
-      data?.data?.SHM ||
-      data?.data?.shm ||
+      priceData?.data?.[String(id)];
+
+    const price =
+      result?.quote?.USD?.price ??
+      result?.quotes?.find(
+        q => q.symbol === "USD"
+      )?.price ??
       null;
 
-    let price = null;
-
-    if (result) {
-      price =
-        result.price ??
-        result.quote?.USD?.price ??
-        result.USD?.price ??
-        result.USD ??
-        null;
-    }
-
-    /*
-      Extra fallback:
-      Search any returned object for SHM.
-    */
-
-    if (price === null && data?.data) {
-
-      for (const item of Object.values(data.data)) {
-
-        if (
-          String(item?.symbol || "")
-            .toUpperCase() === "SHM"
-        ) {
-          price =
-            item?.price ??
-            item?.quote?.USD?.price ??
-            item?.USD?.price ??
-            item?.USD ??
-            null;
-
-          if (price !== null) {
-            break;
-          }
-        }
-      }
-    }
-
     if (price === null) {
-
       return res.status(502).json({
         success: false,
-        error: "SHM price not found in CoinMarketCap response",
-        details: data
+        step: "extract-price",
+        error: "Price not found",
+        coinId: id,
+        coin: coin,
+        details: priceData
       });
-
     }
 
     res.setHeader(
@@ -95,44 +106,26 @@ export default async function handler(req, res) {
       "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
     );
 
-    res.setHeader(
-      "Pragma",
-      "no-cache"
-    );
-
-    res.setHeader(
-      "Expires",
-      "0"
-    );
-
     return res.status(200).json({
-
       success: true,
-
       symbol: "SHM",
-
+      name: coin.name,
+      coinId: id,
       priceUsd: Number(price),
-
       source: "CoinMarketCap",
-
       checkedAt: new Date().toISOString()
-
     });
 
   } catch (error) {
 
     console.error(
-      "SHM price error:",
+      "SHM PRICE ERROR:",
       error
     );
 
     return res.status(500).json({
-
       success: false,
-
       error: error.message
-
     });
-
   }
 }
