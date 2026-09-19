@@ -1,6 +1,43 @@
-const grid=document.querySelector('#grid'), statusEl=document.querySelector('#status'), search=document.querySelector('#search'), more=document.querySelector('#more');
-let all=[],next=null;
-function esc(s=''){return String(s).replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#039;'}[c]))}
-function render(){const q=search.value.trim().toLowerCase();const rows=all.filter(t=>[t.name,t.symbol,t.address].some(v=>(v||'').toLowerCase().includes(q)));grid.innerHTML=rows.map(t=>{const initial=esc((t.symbol||t.name||'?')[0]);const img=t.icon_url?`<img class="logo" src="${esc(t.icon_url)}" onerror="this.outerHTML='<div class=\'logo fallback\'>${initial}</div>'">`:`<div class="logo fallback">${initial}</div>`;const price=t.exchange_rate?`$${Number(t.exchange_rate).toLocaleString(undefined,{maximumSignificantDigits:8})}`:'Price unavailable';return `<article class="card"><div class="top">${img}<div><div class="name">${esc(t.name||'Unknown token')}</div><div class="symbol">${esc(t.symbol||'—')}</div></div></div><div class="price">${price}</div><div class="meta">${esc(t.address||'')}</div><p><a target="_blank" rel="noopener" href="https://explorer.shardeum.org/token/${encodeURIComponent(t.address)}">View on explorer ↗</a></p></article>`}).join('');statusEl.textContent=`Showing ${rows.length} of ${all.length} loaded tokens`;}
-async function load(cursor=''){statusEl.textContent='Loading tokens…';try{const r=await fetch('/api/tokens'+(cursor?`?cursor=${encodeURIComponent(cursor)}`:''));if(!r.ok)throw new Error(await r.text());const d=await r.json();all=[...all,...(d.items||[])];next=d.next_cursor||null;more.hidden=!next;render()}catch(e){statusEl.textContent='Could not load tokens: '+e.message}}
-search.addEventListener('input',render);document.querySelector('#refresh').onclick=()=>{all=[];next=null;load()};more.onclick=()=>next&&load(next);load();
+let tokens = [];
+let nextPageParams = null;
+
+async function loadTokens() {
+    try {
+        let url = "/api/tokens";
+
+        if (nextPageParams) {
+            const params = new URLSearchParams(nextPageParams);
+            url += "?" + params.toString();
+        }
+
+        const response = await fetch(url);
+
+        if (!response.ok) {
+            throw new Error("Failed to load tokens");
+        }
+
+        const data = await response.json();
+
+        const newTokens = data.items || [];
+
+        tokens = [...tokens, ...newTokens];
+
+        nextPageParams = data.next_page_params || null;
+
+        renderTokens();
+
+        const loadMoreButton =
+            document.getElementById("loadMore");
+
+        if (loadMoreButton) {
+            loadMoreButton.style.display =
+                nextPageParams ? "block" : "none";
+        }
+
+    } catch (error) {
+        console.error(error);
+
+        document.getElementById("status").textContent =
+            "Could not load tokens: " + error.message;
+    }
+}
