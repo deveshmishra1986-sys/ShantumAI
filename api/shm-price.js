@@ -1,34 +1,74 @@
-
 const SHM_API =
-  "https://api.coingecko.com/api/v3/simple/price?ids=shardeum-2&vs_currencies=usd";
+  "https://api.coinpaprika.com/v1/search?q=SHM&c=currencies&limit=10";
 
 export default async function handler(req, res) {
   try {
-    const response = await fetch(SHM_API, {
+    // Find SHM
+    const searchResponse = await fetch(SHM_API, {
       cache: "no-store",
       headers: {
-        Accept: "application/json",
-        "User-Agent": "ShantumDashboard/1.0"
+        Accept: "application/json"
       }
     });
 
-    const text = await response.text();
+    if (!searchResponse.ok) {
+      throw new Error(
+        `CoinPaprika search HTTP ${searchResponse.status}`
+      );
+    }
 
-    let data;
+    const searchData = await searchResponse.json();
 
-    try {
-      data = JSON.parse(text);
-    } catch {
-      data = text;
+    const coin = (searchData.currencies || []).find(
+      (item) =>
+        String(item.symbol).toUpperCase() === "SHM" &&
+        String(item.name).toLowerCase().includes("shardeum")
+    );
+
+    if (!coin) {
+      throw new Error("Shardeum (SHM) not found");
+    }
+
+    // Get price
+    const priceResponse = await fetch(
+      `https://api.coinpaprika.com/v1/tickers/${coin.id}?quotes=USD`,
+      {
+        cache: "no-store",
+        headers: {
+          Accept: "application/json"
+        }
+      }
+    );
+
+    if (!priceResponse.ok) {
+      throw new Error(
+        `CoinPaprika price HTTP ${priceResponse.status}`
+      );
+    }
+
+    const priceData = await priceResponse.json();
+
+    const priceUsd =
+      priceData?.quotes?.USD?.price;
+
+    if (
+      priceUsd === undefined ||
+      priceUsd === null
+    ) {
+      throw new Error("SHM USD price not found");
     }
 
     return res.status(200).json({
       success: true,
-      httpStatus: response.status,
-      coinGeckoResponse: data
+      symbol: "SHM",
+      priceUsd: Number(priceUsd),
+      source: "CoinPaprika",
+      checkedAt: new Date().toISOString()
     });
 
   } catch (error) {
+
+    console.error("SHM PRICE ERROR:", error);
 
     return res.status(500).json({
       success: false,
