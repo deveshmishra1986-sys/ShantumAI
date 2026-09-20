@@ -1,5 +1,6 @@
 const SHM_API =
-  "https://api.coingecko.com/api/v3/simple/price?ids=shardeum&vs_currencies=usd";
+  "https://api.coingecko.com/api/v3/simple/price?ids=shardeum-2&vs_currencies=usd";
+
 export default async function handler(req, res) {
   try {
     const response = await fetch(SHM_API, {
