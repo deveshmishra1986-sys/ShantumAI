@@ -1,353 +1,702 @@
+/* ==================================================
+   GLOBAL
+================================================== */
+
 * {
   box-sizing: border-box;
 }
 
+html,
 body {
   margin: 0;
-  background: #080d1d;
+  padding: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family:
+    Inter,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    Arial,
+    sans-serif;
+
   color: #ffffff;
-  font-family: Arial, Helvetica, sans-serif;
+
+  background:
+    radial-gradient(
+      circle at 20% 20%,
+      rgba(110, 50, 220, 0.12),
+      transparent 35%
+    ),
+    radial-gradient(
+      circle at 80% 20%,
+      rgba(0, 110, 255, 0.12),
+      transparent 35%
+    ),
+    linear-gradient(
+      135deg,
+      #030711 0%,
+      #07101f 50%,
+      #02050d 100%
+    );
+
+  min-height: 100vh;
 }
 
-main {
-  width: 94%;
-  max-width: 1400px;
-  margin: auto;
-  padding: 30px 0 60px;
-}
 
-/* HEADER */
+/* ==================================================
+   MAIN DASHBOARD
+================================================== */
 
-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 35px;
-}
-
-header h1 {
-  margin: 0 0 12px;
-  font-size: 48px;
-}
-
-header p {
-  margin: 0;
-  color: #9da8c2;
-  font-size: 17px;
-}
-
-.badge {
-  background: #6746f5;
-  padding: 12px 20px;
-  border-radius: 25px;
-}
-
-/* SEARCH */
-
-.controls {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 18px;
-}
-
-#search {
-  flex: 1;
-  height: 56px;
-  padding: 0 18px;
-  border: 1px solid #303b59;
-  border-radius: 12px;
-  background: #11182c;
-  color: white;
-  font-size: 16px;
-}
-
-#search::placeholder {
-  color: #7f89a3;
-}
-
-#refresh {
-  width: 88px;
-  border: 0;
-  border-radius: 12px;
-  background: #6746f5;
-  color: white;
-  cursor: pointer;
-  font-size: 15px;
-}
-
-#status {
-  color: #aeb8d0;
-  margin: 15px 0 25px;
-}
-
-/* =========================
-   TOKEN GRID
-   ========================= */
-
-.grid {
-  display: grid !important;
-  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-  gap: 22px !important;
+.dashboard {
   width: 100%;
+  max-width: 1500px;
+
+  margin: 0 auto;
+
+  padding:
+    55px
+    40px
+    30px;
 }
 
-/*
-   IMPORTANT:
-   Style EVERY direct child of grid.
 
-   This works even if app.js doesn't
-   add the token-card class.
-*/
+/* ==================================================
+   HEADER
+================================================== */
 
-.grid > div {
-  width: 100% !important;
-  min-width: 0 !important;
-  min-height: 300px !important;
+.hero {
+  text-align: center;
 
-  padding: 22px !important;
+  margin-bottom: 55px;
+}
 
-  background: #11182c !important;
-  border: 1px solid #293653 !important;
-  border-radius: 18px !important;
+.hero h1 {
+  margin: 0;
 
-  color: #ffffff !important;
+  font-size: clamp(
+    42px,
+    5vw,
+    72px
+  );
 
-  overflow: hidden !important;
+  font-weight: 800;
 
-  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.25);
+  letter-spacing: -2px;
 
-  display: block !important;
+  background:
+    linear-gradient(
+      90deg,
+      #ffffff,
+      #d9e1ff,
+      #ffffff
+    );
+
+  -webkit-background-clip: text;
+  background-clip: text;
+
+  color: transparent;
+}
+
+.hero p {
+  margin:
+    18px
+    0
+    0;
+
+  font-size: 22px;
+
+  color: #aebbd4;
+
+  letter-spacing: 0.3px;
+}
+
+
+/* ==================================================
+   TWO CARD GRID
+================================================== */
+
+.coins-grid {
+
+  display: grid;
+
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+
+  gap: 38px;
+
+  align-items: stretch;
+}
+
+
+/* ==================================================
+   CARD
+================================================== */
+
+.coin-card {
 
   position: relative;
-}
 
-/* CARD HOVER */
+  min-height: 620px;
 
-.grid > div:hover {
-  border-color: #6746f5 !important;
-  transform: translateY(-2px);
-}
+  padding: 48px;
 
-/* =========================
-   TOKEN LOGO
-   ========================= */
+  border-radius: 28px;
 
-.token-logo {
-  width: 54px !important;
-  height: 54px !important;
-  margin-bottom: 18px !important;
-}
+  background:
+    linear-gradient(
+      145deg,
+      rgba(13, 19, 40, 0.96),
+      rgba(4, 10, 23, 0.98)
+    );
 
-.token-logo img,
-.token-placeholder {
-  width: 54px !important;
-  height: 54px !important;
-  border-radius: 50% !important;
-}
+  overflow: hidden;
 
-.token-logo img {
-  display: block;
-  object-fit: cover;
-}
-
-.token-placeholder {
-  display: flex !important;
-  align-items: center;
-  justify-content: center;
-  background: #6746f5 !important;
-  color: white !important;
-  font-size: 20px;
-  font-weight: bold;
-}
-
-/* =========================
-   TOKEN INFO
-   ========================= */
-
-.token-info {
-  width: 100% !important;
-  min-width: 0 !important;
-}
-
-.token-info h3 {
-  margin: 0 0 8px !important;
-  font-size: 19px !important;
-  line-height: 1.35 !important;
-  word-break: break-word !important;
-}
-
-.symbol {
-  color: #929db8 !important;
-  font-size: 14px !important;
-  margin-bottom: 22px !important;
-}
-
-.price {
-  font-size: 17px !important;
-  margin-bottom: 12px !important;
-}
-
-.holders,
-.trades {
-  color: #b9c2d6 !important;
-  font-size: 14px !important;
-  margin-bottom: 7px !important;
-}
-
-/* =========================
-   CONTRACT ADDRESS
-   ========================= */
-
-.address {
-  display: block !important;
-
-  width: 100% !important;
-
-  margin-top: 16px !important;
-  padding-top: 12px !important;
-
-  border-top: 1px solid #293653 !important;
-
-  color: #7f8aa5 !important;
-
-  font-size: 11px !important;
-  line-height: 1.5 !important;
-
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-  white-space: nowrap !important;
-}
-
-/* =========================
-   LOAD MORE
-   ========================= */
-
-.more {
-  display: block;
-  margin: 30px auto;
-  padding: 13px 30px;
-
-  border: 0;
-  border-radius: 12px;
-
-  background: #6746f5;
-  color: white;
-
-  cursor: pointer;
-  font-size: 15px;
-}
-
-.more:hover {
-  background: #795cff;
-}
-
-/* FOOTER */
-
-footer {
-  margin-top: 40px;
-  padding-top: 20px;
-  border-top: 1px solid #293653;
-  color: #707c98;
-  font-size: 13px;
-}
-
-/* TABLET */
-
-@media (max-width: 1100px) {
-
-  .grid {
-    grid-template-columns:
-      repeat(3, minmax(0, 1fr)) !important;
-  }
-}
-
-/* MOBILE */
-
-@media (max-width: 750px) {
-
-  main {
-    width: 92%;
-  }
-
-  header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 20px;
-  }
-
-  header h1 {
-    font-size: 36px;
-  }
-
-  .controls {
-    flex-direction: column;
-  }
-
-  #search {
-    width: 100%;
-  }
-
-  #refresh {
-    width: 100%;
-    height: 50px;
-  }
-
-  .grid {
-    grid-template-columns: 1fr !important;
-  }
-}
-
-.shm-price-box {
-  margin: 24px 0;
-  padding: 18px 22px;
-  border: 1px solid #e5e7eb;
-  border-radius: 14px;
-  background: #ffffff;
   display: flex;
+
+  flex-direction: column;
+
+  justify-content: flex-start;
+
+  transition:
+    transform 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
+
+/* subtle background glow */
+
+.coin-card::before {
+  content: "";
+
+  position: absolute;
+
+  width: 300px;
+  height: 300px;
+
+  border-radius: 50%;
+
+  filter: blur(90px);
+
+  opacity: 0.18;
+
+  pointer-events: none;
+}
+
+.shantum-card::before {
+  background: #8b35ff;
+
+  left: -100px;
+  top: -100px;
+}
+
+.shardeum-card::before {
+  background: #087cff;
+
+  right: -100px;
+  top: -100px;
+}
+
+
+.coin-card:hover {
+  transform: translateY(-6px);
+}
+
+
+/* ==================================================
+   SHANTUM BORDER
+================================================== */
+
+.shantum-card {
+  border:
+    2px solid
+    rgba(157, 62, 255, 0.85);
+
+  box-shadow:
+    0 0 35px
+    rgba(120, 35, 255, 0.14);
+}
+
+.shantum-card:hover {
+  box-shadow:
+    0 0 55px
+    rgba(150, 45, 255, 0.25);
+}
+
+
+/* ==================================================
+   SHARDEUM BORDER
+================================================== */
+
+.shardeum-card {
+  border:
+    2px solid
+    rgba(0, 126, 255, 0.85);
+
+  box-shadow:
+    0 0 35px
+    rgba(0, 100, 255, 0.14);
+}
+
+.shardeum-card:hover {
+  box-shadow:
+    0 0 55px
+    rgba(0, 125, 255, 0.25);
+}
+
+
+/* ==================================================
+   CARD HEADER
+================================================== */
+
+.coin-header {
+
+  position: relative;
+
+  z-index: 2;
+
+  display: flex;
+
   align-items: center;
-  justify-content: space-between;
-  gap: 20px;
+
+  gap: 28px;
+
+  min-height: 150px;
 }
 
-.shm-label {
-  display: block;
-  font-size: 13px;
-  color: #6b7280;
-  margin-bottom: 5px;
+
+/* ==================================================
+   LOGO
+================================================== */
+
+.coin-logo {
+
+  width: 145px;
+
+  height: 145px;
+
+  object-fit: contain;
+
+  flex-shrink: 0;
+
+  border-radius: 50%;
 }
 
-#shm-price {
-  display: block;
-  font-size: 25px;
+
+/* Shantum logo glow */
+
+.shantum-card .coin-logo {
+
+  filter:
+    drop-shadow(
+      0 0 18px
+      rgba(160, 70, 255, 0.65)
+    );
+}
+
+
+/* Shardeum logo glow */
+
+.shardeum-card .coin-logo {
+
+  filter:
+    drop-shadow(
+      0 0 18px
+      rgba(0, 130, 255, 0.65)
+    );
+}
+
+
+/* ==================================================
+   NAME + SYMBOL
+================================================== */
+
+.coin-title {
+  display: flex;
+
+  flex-direction: column;
+
+  gap: 8px;
+}
+
+.coin-header h2 {
+
+  margin: 0;
+
+  font-size: 43px;
+
+  line-height: 1.05;
+
+  font-weight: 800;
+}
+
+.coin-header span {
+
+  font-size: 28px;
+
   font-weight: 700;
 }
 
-#shm-updated {
-  display: block;
-  margin-top: 5px;
-  color: #6b7280;
-  font-size: 12px;
+.shantum-card .coin-header span {
+  color: #b66aff;
 }
 
-.shm-source {
-  font-size: 13px;
-  color: #6b7280;
+.shardeum-card .coin-header span {
+  color: #168cff;
 }
 
-.shm-source a {
-  color: #2563eb;
+
+/* ==================================================
+   PRICE
+================================================== */
+
+.coin-price {
+
+  position: relative;
+
+  z-index: 2;
+
+  margin-top: 48px;
+
+  font-size: 46px;
+
+  font-weight: 800;
+
+  letter-spacing: -1px;
+
+  color: #ffffff;
+}
+
+.shantum-card .coin-price {
+  text-shadow:
+    0 0 18px
+    rgba(164, 70, 255, 0.25);
+}
+
+.shardeum-card .coin-price {
+  text-shadow:
+    0 0 18px
+    rgba(0, 130, 255, 0.25);
+}
+
+
+/* ==================================================
+   INFORMATION
+================================================== */
+
+.coin-info {
+
+  position: relative;
+
+  z-index: 2;
+
+  margin-top: 38px;
+
+  padding-top: 30px;
+
+  border-top:
+    1px solid
+    rgba(255, 255, 255, 0.13);
+
+  display: flex;
+
+  flex-direction: column;
+
+  gap: 25px;
+}
+
+.coin-info > div {
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: space-between;
+
+  gap: 20px;
+}
+
+.coin-info small {
+
+  font-size: 19px;
+
+  color: #aebbd4;
+
+  font-weight: 500;
+}
+
+.coin-info strong {
+
+  font-size: 19px;
+
+  color: #ffffff;
+
+  font-weight: 700;
+
+  text-align: right;
+}
+
+
+/* ==================================================
+   EXPLORER BUTTON
+================================================== */
+
+.explorer-button {
+
+  position: relative;
+
+  z-index: 2;
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: center;
+
+  width: 100%;
+
+  min-height: 76px;
+
+  margin-top: auto;
+
+  padding: 15px 25px;
+
+  border-radius: 17px;
+
   text-decoration: none;
+
+  font-size: 22px;
+
+  font-weight: 700;
+
+  transition:
+    all 0.25s ease;
 }
 
-.shm-source a:hover {
-  text-decoration: underline;
+
+/* Shantum button */
+
+.shantum-card .explorer-button {
+
+  color: #c47aff;
+
+  border:
+    2px solid
+    #9c3cff;
+
+  background:
+    rgba(110, 35, 180, 0.12);
+
+  box-shadow:
+    0 0 20px
+    rgba(140, 45, 255, 0.10);
 }
 
-@media (max-width: 600px) {
+.shantum-card .explorer-button:hover {
 
-  .shm-price-box {
-    flex-direction: column;
-    align-items: flex-start;
+  color: #ffffff;
+
+  background:
+    rgba(135, 45, 230, 0.25);
+
+  box-shadow:
+    0 0 30px
+    rgba(150, 45, 255, 0.30);
+}
+
+
+/* Shardeum button */
+
+.shardeum-card .explorer-button {
+
+  color: #2495ff;
+
+  border:
+    2px solid
+    #0785ff;
+
+  background:
+    rgba(0, 90, 190, 0.10);
+
+  box-shadow:
+    0 0 20px
+    rgba(0, 110, 255, 0.10);
+}
+
+.shardeum-card .explorer-button:hover {
+
+  color: #ffffff;
+
+  background:
+    rgba(0, 105, 220, 0.22);
+
+  box-shadow:
+    0 0 30px
+    rgba(0, 125, 255, 0.30);
+}
+
+
+/* ==================================================
+   LOADING
+================================================== */
+
+.loading {
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: center;
+
+  min-height: 500px;
+
+  color: #9caac5;
+
+  font-size: 20px;
+}
+
+
+/* ==================================================
+   ERROR
+================================================== */
+
+.error {
+
+  padding: 30px;
+
+  color: #ff7070;
+
+  text-align: center;
+
+  font-size: 18px;
+}
+
+
+/* ==================================================
+   FOOTER
+================================================== */
+
+.dashboard-footer {
+
+  margin-top: 35px;
+
+  text-align: center;
+
+  color: #65738d;
+
+  font-size: 14px;
+}
+
+
+/* ==================================================
+   TABLET
+================================================== */
+
+@media (max-width: 1000px) {
+
+  .dashboard {
+    padding: 40px 25px;
+  }
+
+  .coins-grid {
+    gap: 25px;
+  }
+
+  .coin-card {
+    padding: 30px;
+  }
+
+  .coin-logo {
+    width: 110px;
+    height: 110px;
+  }
+
+  .coin-header h2 {
+    font-size: 34px;
+  }
+
+  .coin-header span {
+    font-size: 23px;
+  }
+
+  .coin-price {
+    font-size: 36px;
+  }
+
+}
+
+
+/* ==================================================
+   MOBILE
+================================================== */
+
+@media (max-width: 760px) {
+
+  .dashboard {
+    padding: 35px 18px;
+  }
+
+  .hero {
+    margin-bottom: 35px;
+  }
+
+  .hero h1 {
+    font-size: 40px;
+    letter-spacing: -1px;
+  }
+
+  .hero p {
+    font-size: 17px;
+    line-height: 1.5;
+  }
+
+  /*
+     On mobile we stack the cards.
+     Desktop/tablet remains side-by-side.
+  */
+
+  .coins-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .coin-card {
+    min-height: 550px;
+    padding: 28px;
+  }
+
+  .coin-header {
+    gap: 20px;
+  }
+
+  .coin-logo {
+    width: 90px;
+    height: 90px;
+  }
+
+  .coin-header h2 {
+    font-size: 30px;
+  }
+
+  .coin-header span {
+    font-size: 21px;
+  }
+
+  .coin-price {
+    margin-top: 35px;
+    font-size: 34px;
+  }
+
+  .coin-info small,
+  .coin-info strong {
+    font-size: 16px;
+  }
+
+  .explorer-button {
+    min-height: 65px;
+    font-size: 19px;
   }
 
 }
