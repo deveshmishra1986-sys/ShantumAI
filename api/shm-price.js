@@ -6,33 +6,28 @@ export default async function handler(req, res) {
     const response = await fetch(SHM_API, {
       cache: "no-store",
       headers: {
-        Accept: "application/json"
+        Accept: "application/json",
+        "User-Agent": "ShantumDashboard/1.0"
       }
     });
 
-    if (!response.ok) {
-      throw new Error(`CoinGecko HTTP ${response.status}`);
-    }
+    const text = await response.text();
 
-    const data = await response.json();
+    let data;
 
-    const priceUsd = data?.["shardeum-new"]?.usd;
-
-    if (priceUsd === undefined || priceUsd === null) {
-      throw new Error("SHM price not found");
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = text;
     }
 
     return res.status(200).json({
       success: true,
-      symbol: "SHM",
-      priceUsd: Number(priceUsd),
-      checkedAt: new Date().toISOString(),
-      source: "CoinGecko"
+      httpStatus: response.status,
+      coinGeckoResponse: data
     });
 
   } catch (error) {
-
-    console.error("SHM PRICE ERROR:", error);
 
     return res.status(500).json({
       success: false,
