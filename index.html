@@ -1,5 +1,4 @@
 <!doctype html>
-
 <html lang="en">
 
 <head>
@@ -11,7 +10,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>Shantum | Shardeum</title>
+  <title>Shantum & Shardeum</title>
 
   <link
     rel="stylesheet"
@@ -22,41 +21,61 @@
 
 <body>
 
-  <main class="container">
+  <main class="dashboard">
 
-    <header class="page-header">
+    <!-- HEADER -->
 
-      <h1>Shantum & Shardeum</h1>
+    <header class="hero">
+
+      <h1>Shantum &amp; Shardeum</h1>
 
       <p>
-        Shantum ecosystem dashboard on Shardeum
+        Two Tokens. One Ecosystem. Powered by Shardeum.
       </p>
 
     </header>
 
+
+    <!-- CARDS -->
+
     <section class="coins-grid">
+
+      <!-- SHANTUM -->
 
       <div
         id="shantum-card"
-        class="coin-card"
+        class="coin-card shantum-card"
       >
+
         <div class="loading">
           Loading Shantum...
         </div>
+
       </div>
+
+
+      <!-- SHARDEUM -->
 
       <div
         id="shardeum-card"
-        class="coin-card"
+        class="coin-card shardeum-card"
       >
+
         <div class="loading">
           Loading Shardeum...
         </div>
+
       </div>
 
     </section>
 
+
+    <footer class="dashboard-footer">
+      Shantum ecosystem on Shardeum
+    </footer>
+
   </main>
+
 
   <script src="/app.js"></script>
 
