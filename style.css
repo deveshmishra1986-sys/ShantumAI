@@ -700,3 +700,136 @@ body {
   }
 
 }
+
+/* ==================================================
+   SHANTUM SOCIAL LINKS
+================================================== */
+
+.social-links {
+  position: relative;
+  z-index: 2;
+
+  display: grid;
+
+  grid-template-columns:
+    repeat(3, 1fr);
+
+  gap: 12px;
+
+  margin-top: 14px;
+}
+
+.social-button {
+  min-height: 52px;
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: center;
+
+  gap: 8px;
+
+  border-radius: 12px;
+
+  text-decoration: none;
+
+  font-size: 16px;
+
+  font-weight: 700;
+
+  transition:
+    all 0.25s ease;
+}
+
+.social-icon {
+  font-size: 19px;
+}
+
+
+/* Telegram */
+
+.telegram-button {
+  color: #35aeea;
+
+  border:
+    1px solid
+    rgba(53, 174, 234, 0.7);
+
+  background:
+    rgba(53, 174, 234, 0.08);
+}
+
+.telegram-button:hover {
+  color: #ffffff;
+
+  background:
+    rgba(53, 174, 234, 0.20);
+
+  box-shadow:
+    0 0 20px
+    rgba(53, 174, 234, 0.25);
+}
+
+
+/* X */
+
+.x-button {
+  color: #ffffff;
+
+  border:
+    1px solid
+    rgba(255, 255, 255, 0.35);
+
+  background:
+    rgba(255, 255, 255, 0.05);
+}
+
+.x-button:hover {
+  color: #ffffff;
+
+  background:
+    rgba(255, 255, 255, 0.14);
+
+  box-shadow:
+    0 0 20px
+    rgba(255, 255, 255, 0.15);
+}
+
+
+/* Trade */
+
+.trade-button {
+  color: #c47aff;
+
+  border:
+    1px solid
+    rgba(156, 60, 255, 0.7);
+
+  background:
+    rgba(110, 35, 180, 0.10);
+}
+
+.trade-button:hover {
+  color: #ffffff;
+
+  background:
+    rgba(135, 45, 230, 0.22);
+
+  box-shadow:
+    0 0 20px
+    rgba(150, 45, 255, 0.25);
+}
+
+
+/* ==================================================
+   MOBILE
+================================================== */
+
+@media (max-width: 600px) {
+
+  .social-links {
+    grid-template-columns: 1fr;
+  }
+
+}
