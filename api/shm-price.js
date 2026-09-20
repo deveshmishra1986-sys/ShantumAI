@@ -1,65 +1,32 @@
 const SHM_API =
-  "https://api.coinpaprika.com/v1/search?q=SHM&c=currencies&limit=10";
+  "https://api.coinpaprika.com/v1/tickers/shm-shardeum?quotes=USD";
 
 export default async function handler(req, res) {
   try {
-    // Find SHM
-    const searchResponse = await fetch(SHM_API, {
+    const response = await fetch(SHM_API, {
       cache: "no-store",
       headers: {
         Accept: "application/json"
       }
     });
 
-    if (!searchResponse.ok) {
+    if (!response.ok) {
       throw new Error(
-        `CoinPaprika search HTTP ${searchResponse.status}`
+        `CoinPaprika HTTP ${response.status}`
       );
     }
 
-    const searchData = await searchResponse.json();
+    const data = await response.json();
 
-    const coin = (searchData.currencies || []).find(
-      (item) =>
-        String(item.symbol).toUpperCase() === "SHM" &&
-        String(item.name).toLowerCase().includes("shardeum")
-    );
+    const priceUsd = data?.quotes?.USD?.price;
 
-    if (!coin) {
-      throw new Error("Shardeum (SHM) not found");
-    }
-
-    // Get price
-    const priceResponse = await fetch(
-      `https://api.coinpaprika.com/v1/tickers/${coin.id}?quotes=USD`,
-      {
-        cache: "no-store",
-        headers: {
-          Accept: "application/json"
-        }
-      }
-    );
-
-    if (!priceResponse.ok) {
-      throw new Error(
-        `CoinPaprika price HTTP ${priceResponse.status}`
-      );
-    }
-
-    const priceData = await priceResponse.json();
-
-    const priceUsd =
-      priceData?.quotes?.USD?.price;
-
-    if (
-      priceUsd === undefined ||
-      priceUsd === null
-    ) {
-      throw new Error("SHM USD price not found");
+    if (priceUsd === undefined || priceUsd === null) {
+      throw new Error("SHM price not found");
     }
 
     return res.status(200).json({
       success: true,
+      name: "Shardeum",
       symbol: "SHM",
       priceUsd: Number(priceUsd),
       source: "CoinPaprika",
