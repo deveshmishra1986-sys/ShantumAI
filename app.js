@@ -166,14 +166,48 @@ async function loadShardeum() {
 
       </div>
 
-      <a
-        class="explorer-button"
-        href="https://explorer.shardeum.org/"
-        target="_blank"
-        rel="noopener noreferrer"
-      >
-        View Explorer ↗
-      </a>
+  <a
+  class="explorer-button"
+  href="${priceData.explorer}"
+  target="_blank"
+  rel="noopener noreferrer"
+>
+  View Explorer ↗
+</a>
+
+<div class="social-links">
+
+  <a
+    href="https://t.me/shantumcoin"
+    target="_blank"
+    rel="noopener noreferrer"
+    class="social-button telegram-button"
+  >
+    <span class="social-icon">✈</span>
+    Telegram
+  </a>
+
+  <a
+    href="https://x.com/Shantumcoin"
+    target="_blank"
+    rel="noopener noreferrer"
+    class="social-button x-button"
+  >
+    <span class="social-icon">𝕏</span>
+    X
+  </a>
+
+  <a
+    href="https://join.sikka.fun/0ty8uzq"
+    target="_blank"
+    rel="noopener noreferrer"
+    class="social-button trade-button"
+  >
+    <span class="social-icon">↗</span>
+    Trade
+  </a>
+
+</div>
 
     `;
 
