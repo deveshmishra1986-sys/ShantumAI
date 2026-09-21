@@ -70,8 +70,7 @@ body {
 
 .hero {
   text-align: center;
-
-  margin-bottom: 55px;
+  margin-bottom: 30px;
 }
 
 .hero h1 {
@@ -140,9 +139,9 @@ body {
 
   position: relative;
 
-  min-height: 620px;
+  min-height: 560px;
 
-  padding: 48px;
+  padding: 32px;
 
   border-radius: 28px;
 
@@ -262,9 +261,8 @@ body {
 
   align-items: center;
 
-  gap: 28px;
-
-  min-height: 150px;
+  gap: 20px;
+  min-height: 110px;
 }
 
 
@@ -274,9 +272,9 @@ body {
 
 .coin-logo {
 
-  width: 145px;
+  width: 105px;
 
-  height: 145px;
+  height: 105px;
 
   object-fit: contain;
 
@@ -359,9 +357,9 @@ body {
 
   z-index: 2;
 
-  margin-top: 48px;
+    margin-top: 28px;
 
-  font-size: 46px;
+  font-size: 40px;
 
   font-weight: 800;
 
@@ -393,9 +391,8 @@ body {
 
   z-index: 2;
 
-  margin-top: 38px;
-
-  padding-top: 30px;
+ margin-top: 25px;
+padding-top: 22px;
 
   border-top:
     1px solid
@@ -404,8 +401,7 @@ body {
   display: flex;
 
   flex-direction: column;
-
-  gap: 25px;
+  gap: 18px;
 }
 
 .coin-info > div {
@@ -846,10 +842,11 @@ body {
 -------------------------------------------------- */
 
 .supply-section {
-  position: relative;
+   position: relative;
   z-index: 2;
+
   margin-top: 18px;
-  margin-bottom: 35px;
+  margin-bottom: 25px;
 }
 
 .supply-header {
