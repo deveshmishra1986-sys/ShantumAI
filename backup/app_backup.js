@@ -1,304 +1,408 @@
-const state = {
-  tokens: [],
-  cursor: null,
-  loading: false
-};
+// ==================================================
+// SHANTUM & SHARDEUM DASHBOARD
+// ==================================================
 
-const grid = document.getElementById("grid");
-const status = document.getElementById("status");
-const moreButton = document.getElementById("more");
-const refreshButton = document.getElementById("refresh");
-const searchInput = document.getElementById("search");
 
-async function loadTokens(reset = false) {
-  if (state.loading) return;
+// --------------------------------------------------
+// ELEMENTS
+// --------------------------------------------------
 
-  state.loading = true;
+const shantumCard =
+  document.getElementById("shantum-card");
 
-  if (reset) {
-    state.tokens = [];
-    state.cursor = null;
-    grid.innerHTML = "";
-  }
+const shardeumCard =
+  document.getElementById("shardeum-card");
 
-  status.textContent =
-    state.tokens.length === 0
-      ? "Loading tokens..."
-      : "Loading more tokens...";
+
+// --------------------------------------------------
+// LOAD SHANTUM
+// --------------------------------------------------
+
+async function loadShantum() {
 
   try {
-    let url = `/api/tokens?limit=15&_=${Date.now()}`;
 
-    if (state.cursor) {
-      url += `&cursor=${encodeURIComponent(state.cursor)}`;
+    const [priceResponse, infoResponse] =
+      await Promise.all([
+
+        fetch(
+          `/api/shantum-price?_=${Date.now()}`,
+          {
+            cache: "no-store"
+          }
+        ),
+
+        fetch(
+          `/api/shantum?_=${Date.now()}`,
+          {
+            cache: "no-store"
+          }
+        )
+
+      ]);
+
+
+    if (!priceResponse.ok) {
+      throw new Error(
+        `Shantum price HTTP ${priceResponse.status}`
+      );
     }
 
-    const response = await fetch(url, {
-      cache: "no-store"
-    });
+
+    if (!infoResponse.ok) {
+      throw new Error(
+        `Shantum info HTTP ${infoResponse.status}`
+      );
+    }
+
+
+    const priceData =
+      await priceResponse.json();
+
+    const infoData =
+      await infoResponse.json();
+
+
+    const price =
+      Number(priceData.price);
+
+
+    const currentSupply =
+      Number(infoData.currentSupply);
+
+
+    const maxSupply =
+      Number(infoData.maxSupply);
+
+
+    shantumCard.innerHTML = `
+
+      <div class="coin-header">
+
+        <img
+          class="coin-logo"
+          src="${priceData.image}"
+          alt="${priceData.symbol}"
+          onerror="this.style.display='none';"
+        >
+
+        <div>
+
+          <h2>
+            ${priceData.name}
+          </h2>
+
+          <span>
+            ${priceData.symbol}
+          </span>
+
+        </div>
+
+      </div>
+
+
+      <div class="coin-price">
+
+        ${price.toFixed(6)} SHM
+
+      </div>
+
+
+      <div class="coin-info">
+
+        <div>
+
+          <small>
+            Current Supply
+          </small>
+
+          <strong>
+
+            ${currentSupply.toLocaleString(
+              "en-US",
+              {
+                maximumFractionDigits: 6
+              }
+            )}
+
+            STM
+
+          </strong>
+
+        </div>
+
+
+        <div>
+
+          <small>
+            Max Supply
+          </small>
+
+          <strong>
+
+            ${maxSupply.toLocaleString(
+              "en-US"
+            )}
+
+            STM
+
+          </strong>
+
+        </div>
+
+      </div>
+
+
+      <a
+        class="explorer-button"
+        href="${priceData.explorer}"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        View Explorer ↗
+      </a>
+
+
+      <!-- SOCIAL LINKS -->
+
+      <div class="social-links">
+
+        <a
+          href="https://t.me/shantumcoin"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="social-button telegram-button"
+        >
+          <span class="social-icon">
+            ✈
+          </span>
+
+          Telegram
+        </a>
+
+
+        <a
+          href="https://x.com/Shantumcoin"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="social-button x-button"
+        >
+          <span class="social-icon">
+            𝕏
+          </span>
+
+          X
+        </a>
+
+
+        <a
+          href="https://join.sikka.fun/0ty8uzq"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="social-button trade-button"
+        >
+          <span class="social-icon">
+            ↗
+          </span>
+
+          Trade
+        </a>
+
+      </div>
+
+    `;
+
+  }
+
+  catch (error) {
+
+    console.error(
+      "Shantum error:",
+      error
+    );
+
+
+    shantumCard.innerHTML = `
+
+      <div class="error">
+
+        Unable to load Shantum data.
+
+      </div>
+
+    `;
+
+  }
+
+}
+
+
+// --------------------------------------------------
+// LOAD SHARDEUM
+// --------------------------------------------------
+
+async function loadShardeum() {
+
+  try {
+
+    const response =
+      await fetch(
+        `/api/shm-price?_=${Date.now()}`,
+        {
+          cache: "no-store"
+        }
+      );
+
 
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+
+      throw new Error(
+        `SHM HTTP ${response.status}`
+      );
+
     }
 
-    const data = await response.json();
 
-    if (!data.success) {
-      throw new Error(data.error || "Unable to load tokens");
+    const data =
+      await response.json();
+
+
+    let priceText =
+      "Unavailable";
+
+
+    if (
+      data.success &&
+      data.priceUsd !== undefined &&
+      data.priceUsd !== null
+    ) {
+
+      priceText =
+        "$" +
+        Number(data.priceUsd).toFixed(8);
+
     }
 
-    const existing = new Set(
-      state.tokens.map(token =>
-        token.address.toLowerCase()
-      )
+
+    shardeumCard.innerHTML = `
+
+      <div class="coin-header">
+
+        <img
+          class="coin-logo"
+          src="/shardeum-logo.png"
+          alt="SHM"
+          onerror="this.style.display='none';"
+        >
+
+        <div>
+
+          <h2>
+            Shardeum
+          </h2>
+
+          <span>
+            SHM
+          </span>
+
+        </div>
+
+      </div>
+
+
+      <div class="coin-price">
+
+        ${priceText}
+
+      </div>
+
+
+      <div class="coin-info">
+
+        <div>
+
+          <small>
+            Network
+          </small>
+
+          <strong>
+            Shardeum
+          </strong>
+
+        </div>
+
+
+        <div>
+
+          <small>
+            Chain ID
+          </small>
+
+          <strong>
+            8118
+          </strong>
+
+        </div>
+
+      </div>
+
+
+      <a
+        class="explorer-button"
+        href="https://explorer.shardeum.org/"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        View Explorer ↗
+      </a>
+
+    `;
+
+  }
+
+  catch (error) {
+
+    console.error(
+      "Shardeum error:",
+      error
     );
 
-    for (const token of data.items || []) {
-      const address = token.address.toLowerCase();
 
-      if (!existing.has(address)) {
-        state.tokens.push(token);
-        existing.add(address);
-      }
-    }
+    shardeumCard.innerHTML = `
 
-    state.cursor = data.nextCursor || null;
+      <div class="error">
 
-    renderTokens();
+        Unable to load Shardeum data.
 
-    status.textContent =
-      `${state.tokens.length} tokens loaded`;
+      </div>
 
-    moreButton.hidden = !data.hasMore;
+    `;
 
-  } catch (error) {
-    console.error(error);
-    status.textContent = `Error: ${error.message}`;
-  } finally {
-    state.loading = false;
   }
+
 }
 
-function renderTokens() {
-  const search =
-    searchInput.value.trim().toLowerCase();
 
-  const filtered = state.tokens.filter(token => {
-    return (
-      (token.name || "").toLowerCase().includes(search) ||
-      (token.symbol || "").toLowerCase().includes(search) ||
-      (token.address || "").toLowerCase().includes(search)
-    );
-  });
+// --------------------------------------------------
+// START
+// --------------------------------------------------
 
-  grid.innerHTML = "";
+loadShantum();
 
-  /* Force the grid layout */
-  grid.style.display = "grid";
-  grid.style.gridTemplateColumns =
-    "repeat(4, minmax(0, 1fr))";
-  grid.style.gap = "22px";
-  grid.style.width = "100%";
+loadShardeum();
 
-  for (const token of filtered) {
 
-    const card = document.createElement("div");
+// --------------------------------------------------
+// REFRESH EVERY 60 SECONDS
+// --------------------------------------------------
 
-    /*
-     * INLINE STYLES
-     * This bypasses any CSS conflict.
-     */
-    card.style.cssText = `
-      width: 100%;
-      min-width: 0;
-      min-height: 300px;
-      padding: 22px;
-      background: #11182c;
-      border: 1px solid #293653;
-      border-radius: 18px;
-      overflow: hidden;
-      color: #ffffff;
-      box-sizing: border-box;
-      box-shadow: 0 5px 20px rgba(0,0,0,0.25);
-      font-family: Arial, Helvetica, sans-serif;
-    `;
+setInterval(
+  () => {
 
-    const logoContainer =
-      document.createElement("div");
+    loadShantum();
 
-    logoContainer.style.cssText = `
-      width: 54px;
-      height: 54px;
-      margin-bottom: 18px;
-    `;
+    loadShardeum();
 
-    if (token.logo) {
-
-      const img = document.createElement("img");
-
-      img.src = token.logo;
-      img.alt = token.symbol || "Token";
-
-      img.style.cssText = `
-        width: 54px;
-        height: 54px;
-        border-radius: 50%;
-        object-fit: cover;
-        display: block;
-      `;
-
-      logoContainer.appendChild(img);
-
-    } else {
-
-      logoContainer.style.cssText += `
-        border-radius: 50%;
-        background: #6746f5;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        font-size: 20px;
-        font-weight: bold;
-      `;
-
-      logoContainer.textContent =
-        (token.symbol || "?")
-          .charAt(0)
-          .toUpperCase();
-    }
-
-    card.appendChild(logoContainer);
-
-    /* Name */
-
-    const name = document.createElement("div");
-
-    name.textContent =
-      token.name || "Unknown Token";
-
-    name.style.cssText = `
-      font-size: 19px;
-      font-weight: 700;
-      line-height: 1.35;
-      margin-bottom: 7px;
-      word-break: break-word;
-    `;
-
-    card.appendChild(name);
-
-    /* Symbol */
-
-    const symbol = document.createElement("div");
-
-    symbol.textContent =
-      token.symbol || "?";
-
-    symbol.style.cssText = `
-      color: #929db8;
-      font-size: 14px;
-      margin-bottom: 22px;
-    `;
-
-    card.appendChild(symbol);
-
-    /* Price */
-
-    const price = document.createElement("div");
-
-    price.textContent =
-      token.exchange_rate !== null &&
-      token.exchange_rate !== undefined
-        ? `Price: $${token.exchange_rate}`
-        : "Price: N/A";
-
-    price.style.cssText = `
-      font-size: 17px;
-      margin-bottom: 12px;
-    `;
-
-    card.appendChild(price);
-
-    /* Holders */
-
-    const holders = document.createElement("div");
-
-    holders.textContent =
-      `Holders: ${token.holders ?? "N/A"}`;
-
-    holders.style.cssText = `
-      color: #b9c2d6;
-      font-size: 14px;
-      margin-bottom: 7px;
-    `;
-
-    card.appendChild(holders);
-
-    /* Trades */
-
-    const trades = document.createElement("div");
-
-    trades.textContent =
-      `Sikka Trades: ${token.tradeCount ?? 0}`;
-
-    trades.style.cssText = `
-      color: #b9c2d6;
-      font-size: 14px;
-      margin-bottom: 15px;
-    `;
-
-    card.appendChild(trades);
-
-    /* Address */
-
-    const address = document.createElement("div");
-
-    address.textContent =
-      token.address;
-
-    address.title =
-      token.address;
-
-    address.style.cssText = `
-      border-top: 1px solid #293653;
-      padding-top: 12px;
-      color: #7f8aa5;
-      font-size: 11px;
-      line-height: 1.5;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      width: 100%;
-      box-sizing: border-box;
-    `;
-
-    card.appendChild(address);
-
-    grid.appendChild(card);
-  }
-}
-
-/* Search */
-
-searchInput.addEventListener(
-  "input",
-  renderTokens
+  },
+  60 * 1000
 );
-
-/* Refresh */
-
-refreshButton.addEventListener(
-  "click",
-  () => loadTokens(true)
-);
-
-/* Load More */
-
-moreButton.addEventListener(
-  "click",
-  () => loadTokens(false)
-);
-
-/* Initial load */
-
-loadTokens(true);
