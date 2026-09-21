@@ -1,76 +1,49 @@
-const EXPLORER_API = "https://explorer.shardeum.org/api/v2";
-
 const SIKKA_CONTRACT =
-  "0xa1aAd2ED952C64248de99dD4D82ae07b87033bfa".toLowerCase();
+  "0xa1aAd2ED952C64248de99dD4D82ae07b87033bfa";
+
+const BLOCKSCOUT_API =
+  "https://explorer.shardeum.org/api/v2";
 
 const TRADE_TOPIC =
-  "0x47d3fba33a3dd9289bb1b402a128cbea5870c35eb7e684fd999c9b02c612f3f1";
+  "0x47d3fba33a3dd9289bb1b402a128cbea5870c35eb7e684fd999c9b02c612f3f";
 
 const PAGE_SIZE = 15;
-const MAX_LOG_PAGES = 5;
 
 async function getJson(url) {
   const response = await fetch(url, {
-    cache: "no-store"
+    cache: "no-store",
+    headers: {
+      Accept: "application/json"
+    }
   });
 
   if (!response.ok) {
     throw new Error(
-      `Explorer request failed: ${response.status}`
+      `HTTP ${response.status} from ${url}`
     );
   }
 
-  return response.json();
-}
-
-function encodeCursor(cursor) {
-  if (!cursor) return "";
-
-  return Buffer.from(
-    JSON.stringify(cursor)
-  ).toString("base64url");
-}
-
-function decodeCursor(value) {
-  if (!value) return null;
-
-  try {
-    return JSON.parse(
-      Buffer.from(value, "base64url").toString("utf8")
-    );
-  } catch {
-    return null;
-  }
+  return await response.json();
 }
 
 async function getSikkaLogs(cursor) {
   let url =
-    `${EXPLORER_API}/addresses/${SIKKA_CONTRACT}/logs`;
+    `${BLOCKSCOUT_API}/addresses/${SIKKA_CONTRACT}/logs`;
 
   if (cursor) {
-    const params = new URLSearchParams();
-
-    if (cursor.block_number !== undefined) {
-      params.set("block_number", cursor.block_number);
-    }
-
-    if (cursor.index !== undefined) {
-      params.set("index", cursor.index);
-    }
-
-    if (cursor.items_count !== undefined) {
-      params.set("items_count", cursor.items_count);
-    }
-
-    url += `?${params.toString()}`;
+    url +=
+      `?block_number=${encodeURIComponent(cursor.block_number)}` +
+      `&index=${encodeURIComponent(cursor.index)}` +
+      `&items_count=${encodeURIComponent(cursor.items_count)}`;
   }
 
-  return getJson(url);
+  return await getJson(url);
 }
 
 function isTradeLog(log) {
   return (
     Array.isArray(log.topics) &&
+    log.topics.length > 0 &&
     String(log.topics[0]).toLowerCase() ===
       TRADE_TOPIC.toLowerCase()
   );
@@ -78,226 +51,199 @@ function isTradeLog(log) {
 
 async function getTokenTransfers(txHash) {
   const url =
-    `${EXPLORER_API}/transactions/${txHash}/token-transfers?type=ERC-20`;
+    `${BLOCKSCOUT_API}/transactions/${txHash}/token-transfers?type=ERC-20`;
 
-  return getJson(url);
-}
-
-function getTokenFromTransfer(transfer) {
-  const token = transfer?.token;
-
-  if (!token?.address) {
-    return null;
-  }
-
-  return {
-    address: token.address,
-    name: token.name || "Unknown Token",
-    symbol: token.symbol || "?",
-    decimals:
-      token.decimals !== undefined
-        ? Number(token.decimals)
-        : 18,
-    logo: token.icon_url || "",
-    exchange_rate: token.exchange_rate ?? null,
-    holders: token.holders ?? null,
-    total_supply: token.total_supply ?? null,
-    volume_24h: token.volume_24h ?? null
-  };
-}
-
-async function processTrades(logs, tokenMap) {
-  const transactions = new Map();
-
-  for (const log of logs) {
-    if (!isTradeLog(log)) continue;
-
-    const txHash =
-      log.transaction_hash ||
-      log.transactionHash ||
-      log.tx_hash;
-
-    if (txHash) {
-      transactions.set(txHash, true);
-    }
-  }
-
-  const txHashes = [...transactions.keys()];
-
-  // Process 5 transactions at a time
-  for (let i = 0; i < txHashes.length; i += 5) {
-    const batch = txHashes.slice(i, i + 5);
-
-    const results = await Promise.all(
-      batch.map(async (txHash) => {
-        try {
-          const data = await getTokenTransfers(txHash);
-
-          return {
-            txHash,
-            data
-          };
-        } catch (error) {
-          console.error(
-            "Token transfer error:",
-            txHash,
-            error.message
-          );
-
-          return {
-            txHash,
-            data: null
-          };
-        }
-      })
+  try {
+    const data = await getJson(url);
+    return data.items || [];
+  } catch (error) {
+    console.error(
+      "Transfer error:",
+      txHash,
+      error.message
     );
 
-    for (const result of results) {
-      if (!result.data) continue;
+    return [];
+  }
+}
 
-      const transfers = Array.isArray(result.data)
-        ? result.data
-        : result.data.items || [];
+async function processLogs(logs, tokenMap) {
+  for (const log of logs) {
+    if (!isTradeLog(log)) {
+      continue;
+    }
 
-      // Don't count the same token twice in one transaction
-      const seenInTransaction = new Set();
+    const txHash = log.transaction_hash;
 
-      for (const transfer of transfers) {
-        const token = getTokenFromTransfer(transfer);
+    if (!txHash) {
+      continue;
+    }
 
-        if (!token) continue;
+    const transfers =
+      await getTokenTransfers(txHash);
 
-        const address = token.address.toLowerCase();
+    for (const transfer of transfers) {
+      const token = transfer.token;
 
-        if (seenInTransaction.has(address)) {
-          continue;
-        }
-
-        seenInTransaction.add(address);
-
-        if (!tokenMap.has(address)) {
-          tokenMap.set(address, {
-            ...token,
-            tradeCount: 1
-          });
-        } else {
-          const existing = tokenMap.get(address);
-
-          existing.tradeCount =
-            Number(existing.tradeCount || 0) + 1;
-        }
+      if (!token || !token.address) {
+        continue;
       }
+
+      const address =
+        token.address;
+
+      const key =
+        address.toLowerCase();
+
+      // Don't treat Sikka itself as a token
+      if (
+        key ===
+        SIKKA_CONTRACT.toLowerCase()
+      ) {
+        continue;
+      }
+
+      if (!tokenMap.has(key)) {
+        tokenMap.set(key, {
+          address: address,
+          name: token.name || "Unknown Token",
+          symbol: token.symbol || "—",
+          decimals: token.decimals ?? 18,
+          logo: token.icon_url || "",
+          holders: token.holders ?? null,
+          total_supply: token.total_supply ?? null,
+          exchange_rate: token.exchange_rate ?? null,
+          volume_24h: token.volume_24h ?? null,
+          tradeCount: 0
+        });
+      }
+
+      const item =
+        tokenMap.get(key);
+
+      item.tradeCount += 1;
     }
   }
-
-  return txHashes.length;
 }
 
 export default async function handler(req, res) {
-  // Completely disable caching
-  res.setHeader(
-    "Cache-Control",
-    "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
-  );
-
-  res.setHeader(
-    "Pragma",
-    "no-cache"
-  );
-
-  res.setHeader(
-    "Expires",
-    "0"
-  );
-
   try {
-    const cursor = decodeCursor(
-      req.query?.cursor
-    );
+    const requestedLimit =
+      Number(req.query?.limit || 15);
+
+    const limit =
+      Math.min(
+        Math.max(requestedLimit, 1),
+        PAGE_SIZE
+      );
+
+    let cursor = null;
+
+    if (req.query?.cursor) {
+      try {
+        cursor = JSON.parse(
+          decodeURIComponent(
+            req.query.cursor
+          )
+        );
+      } catch {
+        cursor = null;
+      }
+    }
 
     const tokenMap = new Map();
 
-    let currentCursor = cursor;
-    let nextCursor = null;
     let pagesRead = 0;
+    let nextCursor = cursor;
+    let hasMore = true;
 
-    let finished = false;
+    /*
+      Read Sikka log pages until we have
+      enough unique tokens.
+    */
 
     while (
-      tokenMap.size < PAGE_SIZE &&
-      pagesRead < MAX_LOG_PAGES
+      tokenMap.size < limit &&
+      pagesRead < 5 &&
+      hasMore
     ) {
+      const data =
+        await getSikkaLogs(nextCursor);
+
       pagesRead++;
 
-      const data =
-        await getSikkaLogs(currentCursor);
+      const logs =
+        data.items || [];
 
-      const logs = Array.isArray(data)
-        ? data
-        : data.items || [];
-
-      if (!logs.length) {
-        finished = true;
-        break;
-      }
-
-      await processTrades(
+      await processLogs(
         logs,
         tokenMap
       );
 
-      const explorerCursor =
-        data.next_page_params;
-
-      if (!explorerCursor) {
-        finished = true;
-        break;
+      if (
+        data.next_page_params
+      ) {
+        nextCursor =
+          data.next_page_params;
+      } else {
+        hasMore = false;
+        nextCursor = null;
       }
 
-      currentCursor = explorerCursor;
-
-      /*
-       * If we have enough tokens for this page,
-       * save the cursor for Load More.
-       */
-      if (tokenMap.size >= PAGE_SIZE) {
-        nextCursor = explorerCursor;
-        break;
+      if (!logs.length) {
+        hasMore = false;
+        nextCursor = null;
       }
     }
 
     const items =
-      [...tokenMap.values()]
-        .slice(0, PAGE_SIZE);
+      Array.from(
+        tokenMap.values()
+      ).slice(0, limit);
 
-    /*
-     * If we reached the end, there is no Load More.
-     */
-    if (finished) {
-      nextCursor = null;
+    let encodedNextCursor = null;
+
+    if (
+      hasMore &&
+      nextCursor
+    ) {
+      encodedNextCursor =
+        encodeURIComponent(
+          JSON.stringify(
+            nextCursor
+          )
+        );
     }
 
-    res.status(200).json({
+    res.setHeader(
+      "Cache-Control",
+      "no-store, no-cache, must-revalidate"
+    );
+
+    return res.status(200).json({
       success: true,
-      items,
+      items: items,
       count: items.length,
-      hasMore: !!nextCursor,
-      nextCursor: nextCursor
-        ? encodeCursor(nextCursor)
-        : null,
-      pagesRead,
+      hasMore: Boolean(
+        hasMore &&
+        encodedNextCursor
+      ),
+      nextCursor: encodedNextCursor,
+      pagesRead: pagesRead,
       source: "Sikka Trade + Blockscout"
     });
 
   } catch (error) {
+
     console.error(
-      "Tokens API error:",
+      "TOKENS API ERROR:",
       error
     );
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      error: error.message
+      error: error.message,
+      stack: error.stack
     });
   }
 }
