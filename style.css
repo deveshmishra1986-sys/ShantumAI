@@ -1159,3 +1159,252 @@ padding-top: 22px;
   }
 
 }
+
+/* ==================================================
+   FINAL DESKTOP LAYOUT
+================================================== */
+
+.dashboard {
+  max-width: 1450px;
+  margin: 0 auto;
+  padding: 22px 28px 15px;
+}
+
+
+/* HEADER */
+
+.hero {
+  margin-bottom: 22px;
+}
+
+.hero h1 {
+  font-size: clamp(42px, 4vw, 62px);
+}
+
+.hero p {
+  margin-top: 10px;
+  font-size: 20px;
+}
+
+.refresh-button {
+  margin-top: 14px;
+  padding: 10px 18px;
+}
+
+
+/* TWO CARDS */
+
+.coins-grid {
+  gap: 28px;
+}
+
+
+/* CARDS */
+
+.coin-card {
+  min-height: 0;
+  height: 560px;
+
+  padding: 28px 34px;
+
+  border-radius: 24px;
+}
+
+
+/* CARD HEADER */
+
+.coin-header {
+  gap: 18px;
+  min-height: 95px;
+}
+
+.coin-logo {
+  width: 90px;
+  height: 90px;
+}
+
+.coin-header h2 {
+  font-size: 36px;
+}
+
+.coin-header span {
+  font-size: 23px;
+}
+
+
+/* PRICE */
+
+.coin-price {
+  margin-top: 22px;
+  font-size: 40px;
+}
+
+
+/* INFORMATION */
+
+.coin-info {
+  margin-top: 22px;
+  padding-top: 20px;
+  gap: 15px;
+}
+
+.coin-info small,
+.coin-info strong {
+  font-size: 17px;
+}
+
+
+/* SUPPLY */
+
+.supply-section {
+  margin-top: 16px;
+  margin-bottom: 20px;
+}
+
+.supply-header {
+  font-size: 15px;
+  margin-bottom: 7px;
+}
+
+.supply-bar {
+  height: 9px;
+}
+
+
+/* EXPLORER */
+
+.explorer-button {
+  min-height: 56px;
+  font-size: 18px;
+}
+
+
+/* SOCIAL */
+
+.social-links {
+  margin-top: 10px;
+}
+
+.social-button {
+  min-height: 46px;
+  font-size: 15px;
+}
+
+
+/* FOOTER */
+
+.dashboard-footer {
+  margin-top: 14px;
+}
+
+
+/* ==================================================
+   LAPTOP / SMALL DESKTOP
+================================================== */
+
+@media (max-height: 800px) and (min-width: 761px) {
+
+  .dashboard {
+    padding-top: 15px;
+    padding-bottom: 10px;
+  }
+
+  .hero {
+    margin-bottom: 15px;
+  }
+
+  .hero h1 {
+    font-size: 48px;
+  }
+
+  .hero p {
+    margin-top: 6px;
+    font-size: 17px;
+  }
+
+  .refresh-button {
+    margin-top: 8px;
+    padding: 8px 16px;
+  }
+
+  .coin-card {
+    height: 500px;
+    padding: 24px 28px;
+  }
+
+  .coin-header {
+    min-height: 80px;
+  }
+
+  .coin-logo {
+    width: 72px;
+    height: 72px;
+  }
+
+  .coin-header h2 {
+    font-size: 32px;
+  }
+
+  .coin-header span {
+    font-size: 20px;
+  }
+
+  .coin-price {
+    margin-top: 16px;
+    font-size: 34px;
+  }
+
+  .coin-info {
+    margin-top: 18px;
+    padding-top: 16px;
+    gap: 12px;
+  }
+
+  .coin-info small,
+  .coin-info strong {
+    font-size: 15px;
+  }
+
+  .supply-section {
+    margin-top: 12px;
+    margin-bottom: 15px;
+  }
+
+  .explorer-button {
+    min-height: 50px;
+    font-size: 17px;
+  }
+
+  .social-button {
+    min-height: 42px;
+    font-size: 14px;
+  }
+
+}
+
+
+/* ==================================================
+   MOBILE
+================================================== */
+
+@media (max-width: 760px) {
+
+  .dashboard {
+    padding: 25px 16px;
+  }
+
+  .hero {
+    margin-bottom: 25px;
+  }
+
+  .coins-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .coin-card {
+    height: auto;
+    min-height: 0;
+    padding: 25px;
+  }
+
+}
