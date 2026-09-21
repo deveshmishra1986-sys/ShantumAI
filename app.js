@@ -13,6 +13,79 @@ const shantumCard =
 const shardeumCard =
   document.getElementById("shardeum-card");
 
+const refreshButton =
+  document.getElementById("refresh-button");
+
+
+// --------------------------------------------------
+// REFRESH BUTTON
+// --------------------------------------------------
+
+let isRefreshing = false;
+
+async function refreshDashboard() {
+
+  if (isRefreshing) {
+    return;
+  }
+
+  isRefreshing = true;
+
+  if (refreshButton) {
+
+    refreshButton.disabled = true;
+
+    refreshButton.classList.add("refreshing");
+
+    refreshButton.innerHTML = `
+      <span class="refresh-icon">↻</span>
+      Refreshing...
+    `;
+  }
+
+  try {
+
+    await Promise.all([
+      loadShantum(),
+      loadShardeum()
+    ]);
+
+  } finally {
+
+    isRefreshing = false;
+
+    if (refreshButton) {
+
+      refreshButton.disabled = false;
+
+      refreshButton.classList.remove(
+        "refreshing"
+      );
+
+      refreshButton.innerHTML = `
+        <span class="refresh-icon">↻</span>
+        Refresh Data
+      `;
+    }
+
+  }
+
+}
+
+
+// --------------------------------------------------
+// REFRESH BUTTON CLICK
+// --------------------------------------------------
+
+if (refreshButton) {
+
+  refreshButton.addEventListener(
+    "click",
+    refreshDashboard
+  );
+
+}
+
 
 // --------------------------------------------------
 // LOAD SHANTUM
@@ -43,16 +116,20 @@ async function loadShantum() {
 
 
     if (!priceResponse.ok) {
+
       throw new Error(
         `Shantum price HTTP ${priceResponse.status}`
       );
+
     }
 
 
     if (!infoResponse.ok) {
+
       throw new Error(
         `Shantum info HTTP ${infoResponse.status}`
       );
+
     }
 
 
@@ -74,6 +151,95 @@ async function loadShantum() {
     const maxSupply =
       Number(infoData.maxSupply);
 
+
+    // ----------------------------------------------
+    // SUPPLY PERCENTAGE
+    // ----------------------------------------------
+
+    let supplyPercentage = 0;
+
+    if (
+      maxSupply > 0 &&
+      currentSupply >= 0
+    ) {
+
+      supplyPercentage =
+        (currentSupply / maxSupply) * 100;
+
+    }
+
+
+    // Keep percentage sensible
+    supplyPercentage =
+      Math.min(
+        Math.max(supplyPercentage, 0),
+        100
+      );
+
+
+    // ----------------------------------------------
+    // CONTRACT ADDRESS
+    // ----------------------------------------------
+
+    const contractAddress =
+      infoData.contractAddress ||
+      infoData.address ||
+      priceData.contractAddress ||
+      priceData.address ||
+      "";
+
+
+    // ----------------------------------------------
+    // CONTRACT BUTTON
+    // ----------------------------------------------
+
+    let contractSection = "";
+
+    if (contractAddress) {
+
+      contractSection = `
+
+        <div class="contract-section">
+
+          <small>
+            Contract Address
+          </small>
+
+          <div class="contract-row">
+
+            <span
+              class="contract-address"
+              title="${contractAddress}"
+            >
+              ${contractAddress}
+            </span>
+
+            <button
+              class="copy-button"
+              type="button"
+              data-address="${contractAddress}"
+              onclick="copyContract(this)"
+            >
+              Copy
+            </button>
+
+          </div>
+
+          <div
+            class="copy-status"
+            id="copy-status"
+          ></div>
+
+        </div>
+
+      `;
+
+    }
+
+
+    // ----------------------------------------------
+    // SHANTUM CARD
+    // ----------------------------------------------
 
     shantumCard.innerHTML = `
 
@@ -153,8 +319,39 @@ async function loadShantum() {
       </div>
 
 
+      <!-- SUPPLY PROGRESS -->
+
+      <div class="supply-section">
+
+        <div class="supply-header">
+
+          <span>
+            Supply Progress
+          </span>
+
+          <strong>
+            ${supplyPercentage.toFixed(2)}%
+          </strong>
+
+        </div>
+
+        <div class="supply-bar">
+
+          <div
+            class="supply-fill"
+            style="width: ${supplyPercentage}%"
+          ></div>
+
+        </div>
+
+      </div>
+
+
+      ${contractSection}
+
+
       <a
-        class="explorer-button"
+        class="explorer-button interactive-button"
         href="${priceData.explorer}"
         target="_blank"
         rel="noopener noreferrer"
@@ -171,13 +368,15 @@ async function loadShantum() {
           href="https://t.me/shantumcoin"
           target="_blank"
           rel="noopener noreferrer"
-          class="social-button telegram-button"
+          class="social-button telegram-button interactive-button"
         >
+
           <span class="social-icon">
             ✈
           </span>
 
           Telegram
+
         </a>
 
 
@@ -185,13 +384,15 @@ async function loadShantum() {
           href="https://x.com/Shantumcoin"
           target="_blank"
           rel="noopener noreferrer"
-          class="social-button x-button"
+          class="social-button x-button interactive-button"
         >
+
           <span class="social-icon">
             𝕏
           </span>
 
           X
+
         </a>
 
 
@@ -199,13 +400,15 @@ async function loadShantum() {
           href="https://join.sikka.fun/0ty8uzq"
           target="_blank"
           rel="noopener noreferrer"
-          class="social-button trade-button"
+          class="social-button trade-button interactive-button"
         >
+
           <span class="social-icon">
             ↗
           </span>
 
           Trade
+
         </a>
 
       </div>
@@ -235,6 +438,92 @@ async function loadShantum() {
   }
 
 }
+
+
+// --------------------------------------------------
+// COPY CONTRACT ADDRESS
+// --------------------------------------------------
+
+async function copyContract(button) {
+
+  const address =
+    button.getAttribute(
+      "data-address"
+    );
+
+  if (!address) {
+    return;
+  }
+
+
+  try {
+
+    await navigator.clipboard.writeText(
+      address
+    );
+
+
+    button.innerText =
+      "✓ Copied";
+
+
+    button.classList.add(
+      "copied"
+    );
+
+
+    const status =
+      document.getElementById(
+        "copy-status"
+      );
+
+
+    if (status) {
+
+      status.innerText =
+        "Contract address copied";
+
+    }
+
+
+    setTimeout(() => {
+
+      button.innerText =
+        "Copy";
+
+      button.classList.remove(
+        "copied"
+      );
+
+      if (status) {
+
+        status.innerText = "";
+
+      }
+
+    }, 2000);
+
+
+  }
+
+  catch (error) {
+
+    console.error(
+      "Copy failed:",
+      error
+    );
+
+    button.innerText =
+      "Copy failed";
+
+  }
+
+}
+
+
+// Make available to inline onclick
+window.copyContract =
+  copyContract;
 
 
 // --------------------------------------------------
@@ -348,7 +637,7 @@ async function loadShardeum() {
 
 
       <a
-        class="explorer-button"
+        class="explorer-button interactive-button"
         href="https://explorer.shardeum.org/"
         target="_blank"
         rel="noopener noreferrer"
@@ -384,7 +673,7 @@ async function loadShardeum() {
 
 
 // --------------------------------------------------
-// START
+// INITIAL LOAD
 // --------------------------------------------------
 
 loadShantum();
@@ -393,15 +682,19 @@ loadShardeum();
 
 
 // --------------------------------------------------
-// REFRESH EVERY 60 SECONDS
+// AUTO REFRESH EVERY 60 SECONDS
 // --------------------------------------------------
 
 setInterval(
   () => {
 
-    loadShantum();
+    if (!isRefreshing) {
 
-    loadShardeum();
+      loadShantum();
+
+      loadShardeum();
+
+    }
 
   },
   60 * 1000
