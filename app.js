@@ -699,3 +699,409 @@ setInterval(
   },
   60 * 1000
 );
+/*Wallet connect*/
+// ==================================================
+// SHANTUM WALLET
+// READ-ONLY
+// ==================================================
+
+const SHANTUM_CONTRACT =
+  "0x3Fe5fbBA8034762fDd8d3d3b3dD7E788B9a12F04";
+
+const SHARDEUM_CHAIN_ID = "0x1fb6";
+
+const SHARDEUM_RPC =
+  "https://api.shardeum.org";
+
+let connectedWallet = null;
+
+
+// --------------------------------------------------
+// CONNECT WALLET
+// --------------------------------------------------
+
+async function connectWallet() {
+
+  if (!window.ethereum) {
+
+    alert(
+      "MetaMask install करें और फिर दोबारा कोशिश करें।"
+    );
+
+    return;
+  }
+
+  try {
+
+    // Check current network
+    let chainId =
+      await window.ethereum.request({
+        method: "eth_chainId"
+      });
+
+    // Switch to Shardeum
+    if (
+      chainId.toLowerCase() !==
+      SHARDEUM_CHAIN_ID
+    ) {
+
+      try {
+
+        await window.ethereum.request({
+          method: "wallet_switchEthereumChain",
+          params: [
+            {
+              chainId: SHARDEUM_CHAIN_ID
+            }
+          ]
+        });
+
+      } catch (error) {
+
+        // Network does not exist in MetaMask
+        if (error.code === 4902) {
+
+          await window.ethereum.request({
+            method: "wallet_addEthereumChain",
+            params: [
+              {
+                chainId: SHARDEUM_CHAIN_ID,
+
+                chainName: "Shardeum",
+
+                nativeCurrency: {
+                  name: "Shardeum",
+                  symbol: "SHM",
+                  decimals: 18
+                },
+
+                rpcUrls: [
+                  SHARDEUM_RPC
+                ],
+
+                blockExplorerUrls: [
+                  "https://explorer.shardeum.org"
+                ]
+              }
+            ]
+          });
+
+        } else {
+
+          throw error;
+
+        }
+      }
+    }
+
+    // Ask MetaMask for account
+    const accounts =
+      await window.ethereum.request({
+        method: "eth_requestAccounts"
+      });
+
+    if (
+      !accounts ||
+      accounts.length === 0
+    ) {
+      return;
+    }
+
+    connectedWallet =
+      accounts[0];
+
+    await displayWallet();
+
+  } catch (error) {
+
+    console.error(
+      "Wallet connection error:",
+      error
+    );
+
+    alert(
+      error.message ||
+      "Wallet connect नहीं हो पाया।"
+    );
+  }
+}
+
+
+// --------------------------------------------------
+// STM BALANCE
+// --------------------------------------------------
+
+async function getSTMBalance(address) {
+
+  try {
+
+    /*
+      ERC-20 balanceOf(address)
+
+      Function selector:
+      0x70a08231
+    */
+
+    const paddedAddress =
+      address
+        .toLowerCase()
+        .replace("0x", "")
+        .padStart(64, "0");
+
+    const data =
+      "0x70a08231" +
+      paddedAddress;
+
+    const result =
+      await window.ethereum.request({
+        method: "eth_call",
+
+        params: [
+          {
+            to: SHANTUM_CONTRACT,
+            data: data
+          },
+          "latest"
+        ]
+      });
+
+    const balance =
+      BigInt(result);
+
+    /*
+      STM has 18 decimals
+    */
+
+    const whole =
+      balance / 1000000000000000000n;
+
+    const fraction =
+      balance %
+      1000000000000000000n;
+
+    const fractionText =
+      fraction
+        .toString()
+        .padStart(18, "0")
+        .replace(/0+$/, "");
+
+    if (!fractionText) {
+      return whole.toString();
+    }
+
+    return (
+      whole.toString() +
+      "." +
+      fractionText
+    );
+
+  } catch (error) {
+
+    console.error(
+      "STM balance error:",
+      error
+    );
+
+    return "0";
+  }
+}
+
+
+// --------------------------------------------------
+// SHM BALANCE
+// --------------------------------------------------
+
+async function getSHMBalance(address) {
+
+  try {
+
+    const result =
+      await window.ethereum.request({
+        method: "eth_getBalance",
+
+        params: [
+          address,
+          "latest"
+        ]
+      });
+
+    const balance =
+      BigInt(result);
+
+    const whole =
+      balance / 1000000000000000000n;
+
+    const fraction =
+      balance %
+      1000000000000000000n;
+
+    const fractionText =
+      fraction
+        .toString()
+        .padStart(18, "0")
+        .replace(/0+$/, "");
+
+    if (!fractionText) {
+      return whole.toString();
+    }
+
+    return (
+      whole.toString() +
+      "." +
+      fractionText
+    );
+
+  } catch (error) {
+
+    console.error(
+      "SHM balance error:",
+      error
+    );
+
+    return "0";
+  }
+}
+
+
+// --------------------------------------------------
+// DISPLAY WALLET
+// --------------------------------------------------
+
+async function displayWallet() {
+
+  const walletInfo =
+    document.getElementById(
+      "wallet-info"
+    );
+
+  const walletAddress =
+    document.getElementById(
+      "wallet-address"
+    );
+
+  const stmBalance =
+    document.getElementById(
+      "wallet-stm-balance"
+    );
+
+  const shmBalance =
+    document.getElementById(
+      "wallet-shm-balance"
+    );
+
+  const connectButton =
+    document.getElementById(
+      "connect-wallet"
+    );
+
+  const stm =
+    await getSTMBalance(
+      connectedWallet
+    );
+
+  const shm =
+    await getSHMBalance(
+      connectedWallet
+    );
+
+  walletAddress.textContent =
+    connectedWallet.substring(0, 6) +
+    "..." +
+    connectedWallet.substring(
+      connectedWallet.length - 4
+    );
+
+  stmBalance.textContent =
+    Number(stm).toLocaleString(
+      "en-US",
+      {
+        maximumFractionDigits: 6
+      }
+    ) + " STM";
+
+  shmBalance.textContent =
+    Number(shm).toLocaleString(
+      "en-US",
+      {
+        maximumFractionDigits: 6
+      }
+    ) + " SHM";
+
+  walletInfo.style.display =
+    "block";
+
+  connectButton.style.display =
+    "none";
+}
+
+
+// --------------------------------------------------
+// DISCONNECT
+// --------------------------------------------------
+
+function disconnectWallet() {
+
+  connectedWallet = null;
+
+  document.getElementById(
+    "wallet-info"
+  ).style.display = "none";
+
+  document.getElementById(
+    "connect-wallet"
+  ).style.display = "flex";
+}
+
+
+// --------------------------------------------------
+// BUTTON EVENTS
+// --------------------------------------------------
+
+document
+  .getElementById("connect-wallet")
+  ?.addEventListener(
+    "click",
+    connectWallet
+  );
+
+document
+  .getElementById("disconnect-wallet")
+  ?.addEventListener(
+    "click",
+    disconnectWallet
+  );
+
+
+// --------------------------------------------------
+// ACCOUNT CHANGE
+// --------------------------------------------------
+
+if (window.ethereum) {
+
+  window.ethereum.on(
+    "accountsChanged",
+    async function(accounts) {
+
+      if (!accounts.length) {
+
+        disconnectWallet();
+
+        return;
+      }
+
+      connectedWallet =
+        accounts[0];
+
+      await displayWallet();
+    }
+  );
+
+  window.ethereum.on(
+    "chainChanged",
+    function() {
+
+      window.location.reload();
+
+    }
+  );
+}
