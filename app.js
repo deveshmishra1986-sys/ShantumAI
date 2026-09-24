@@ -299,19 +299,30 @@ async function loadSikkaTrades() {
   if (!tradesCard) return;
 
   try {
-    const response = await fetch(
-      `/api/sikka-live-trades?_=${Date.now()}`,
-      { cache: "no-store" }
-    );
+    const [response, shmResponse] = await Promise.all([
+      fetch(`/api/sikka-live-trades?_=${Date.now()}`, { cache: "no-store" }),
+      fetch(`/api/shm-price?_=${Date.now()}`, { cache: "no-store" })
+    ]);
 
     if (!response.ok) {
       throw new Error(`Trades API HTTP ${response.status}`);
     }
 
+    if (!shmResponse.ok) {
+      throw new Error(`SHM/USD API HTTP ${shmResponse.status}`);
+    }
+
     const result = await response.json();
+    const shmData = await shmResponse.json();
 
     if (!result.success) {
       throw new Error(result.error || "Unable to load trades");
+    }
+
+    const shmUsd = Number(shmData.priceUsd);
+
+    if (!Number.isFinite(shmUsd) || shmUsd <= 0) {
+      throw new Error("SHM/USD price unavailable");
     }
 
     const trades = Array.isArray(result.trades)
@@ -334,7 +345,6 @@ async function loadSikkaTrades() {
 
     tradesCard.innerHTML = `
       <div class="sikka-trades-card">
-
         <div class="sikka-title">
           <span>🔥</span>
           <span>LIVE SIKKA TRADES</span>
@@ -345,16 +355,16 @@ async function loadSikkaTrades() {
           <div class="sikka-header">
             <div>TOKEN</div>
             <div>ACTION</div>
-            <div>PRICE</div>
+            <div>PRICE (USD)</div>
+            <div>DATE / TIME</div>
           </div>
 
-          ${trades.map(renderTradeRow).join("")}
+          ${trades.map(trade => renderTradeRow(trade, shmUsd)).join("")}
         </div>
 
         <div class="sikka-updated">
           ● Live data from Sikka
         </div>
-
       </div>
     `;
   } catch (error) {
@@ -379,15 +389,68 @@ async function loadSikkaTrades() {
   }
 }
 
-function renderTradeRow(trade) {
+function formatTradeDateTime(timestamp) {
+  let value = Number(timestamp);
+
+  if (!Number.isFinite(value) || value <= 0) {
+    return {
+      short: "—",
+      full: "Trade time unavailable"
+    };
+  }
+
+  // Sikka may return seconds or milliseconds.
+  if (value < 100000000000) {
+    value *= 1000;
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return {
+      short: "—",
+      full: "Trade time unavailable"
+    };
+  }
+
+  const options = {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true
+  };
+
+  const short = new Intl.DateTimeFormat("en-IN", options).format(date);
+
+  const full = new Intl.DateTimeFormat("en-IN", {
+    ...options,
+    month: "long"
+  }).format(date);
+
+  return {
+    short: `${short} IST`,
+    full: `${full} IST`
+  };
+}
+
+function renderTradeRow(trade, shmUsd) {
   const type = String(trade.type || "").toLowerCase();
   const isBuy = type === "buy";
   const actionClass = isBuy ? "buy" : "sell";
   const actionText = isBuy ? "🟢 BUY" : "🔴 SELL";
 
-  const priceNumber = Number(trade.price);
-  const price = Number.isFinite(priceNumber)
-    ? priceNumber.toFixed(9)
+  const priceShm = Number(trade.price);
+  const priceUsd =
+    Number.isFinite(priceShm) && Number.isFinite(shmUsd)
+      ? priceShm * shmUsd
+      : NaN;
+
+  const price = Number.isFinite(priceUsd)
+    ? `$${priceUsd.toFixed(12)}`
     : "—";
 
   const name =
@@ -404,6 +467,10 @@ function renderTradeRow(trade) {
          >`
       : "";
 
+  const tradeDateTime = formatTradeDateTime(
+    trade.timestamp || trade.t || trade.time
+  );
+
   return `
     <div class="sikka-row">
       <div class="token-name">
@@ -416,7 +483,11 @@ function renderTradeRow(trade) {
       </div>
 
       <div class="trade-price">
-        ${price} SHM
+        ${price}
+      </div>
+
+      <div class="trade-time" title="${escapeAttribute(tradeDateTime.full)}">
+        ${escapeHtml(tradeDateTime.short)}
       </div>
     </div>
   `;
