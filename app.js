@@ -47,7 +47,7 @@ async function refreshDashboard() {
 
     await Promise.all([
       loadShantum(),
-      loadSikkaTrades();
+      loadSikkaTrades()
     ]);
 
   } finally {
