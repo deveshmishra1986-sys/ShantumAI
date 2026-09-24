@@ -85,7 +85,7 @@ export default async function handler(req, res) {
 
             // Add token information
             return trades
-              .slice(0, 5)
+              .slice(0, 10)
               .map(trade => ({
                 name: token.name,
                 ticker: token.ticker,
