@@ -1754,3 +1754,22 @@ padding-top: 22px;
   font-size: 13px;
   white-space: nowrap;
 }
+
+@media (max-width: 700px) {
+
+  .sikka-header,
+  .sikka-row {
+    grid-template-columns: 1.5fr 0.9fr 1.4fr;
+    gap: 8px;
+  }
+
+  .token-name {
+    font-size: 12px;
+  }
+
+  .trade-action,
+  .trade-price {
+    font-size: 11px;
+  }
+
+}
