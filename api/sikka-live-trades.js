@@ -12,15 +12,11 @@ export default async function handler(req, res) {
     );
 
     if (!moversResponse.ok) {
-      throw new Error(
-        `Movers API HTTP ${moversResponse.status}`
-      );
+      throw new Error(`Movers API HTTP ${moversResponse.status}`);
     }
 
     const moversResult = await moversResponse.json();
-
-    const tokens =
-      moversResult?.data?.movers || [];
+    const tokens = moversResult?.data?.movers || [];
 
     if (!tokens.length) {
       return res.status(200).json({
@@ -29,132 +25,86 @@ export default async function handler(req, res) {
       });
     }
 
-    const activeTokens =
-      tokens
-        .filter(token =>
-          token.token_ca &&
-          token.name
-        )
-        .slice(0, 50);
+    const activeTokens = tokens
+      .filter(token => token.token_ca && token.name)
+      .slice(0, 50);
 
-    const tradeResults =
-      await Promise.all(
-        activeTokens.map(async token => {
-          try {
-            const tradeResponse =
-              await fetch(
-                `${SIKKA_BASE_URL}/tokens/${token.token_ca}/trades`,
-                {
-                  cache: "no-store",
-                  headers: {
-                    Accept: "application/json"
-                  }
-                }
-              );
-
-            if (!tradeResponse.ok) {
-              return [];
+    const tradeResults = await Promise.all(
+      activeTokens.map(async token => {
+        try {
+          const tradeResponse = await fetch(
+            `${SIKKA_BASE_URL}/tokens/${token.token_ca}/trades`,
+            {
+              cache: "no-store",
+              headers: { Accept: "application/json" }
             }
+          );
 
-            const tradeResult =
-              await tradeResponse.json();
+          if (!tradeResponse.ok) return [];
 
-            const trades =
-              Array.isArray(tradeResult?.data)
-                ? tradeResult.data
-                : Array.isArray(tradeResult?.data?.data)
-                  ? tradeResult.data.data
-                  : [];
+          const tradeResult = await tradeResponse.json();
 
-            return trades
-              .slice(0, 20)
-              .map(trade => ({
-                name: token.name,
-                ticker: token.ticker,
-                token_ca: token.token_ca,
-                image_url: token.image_url,
-                price: trade.price,
-                type: String(trade.type || "").toLowerCase(),
-                timestamp: Number(trade.t || 0),
-                tx: trade.tx
-              }));
-          } catch (error) {
-            console.error(
-              `Trade error for ${token.name}:`,
-              error
-            );
-            return [];
-          }
-        })
-      );
+          const trades =
+            Array.isArray(tradeResult?.data)
+              ? tradeResult.data
+              : Array.isArray(tradeResult?.data?.data)
+                ? tradeResult.data.data
+                : [];
+
+          return trades.map(trade => ({
+            name: token.name,
+            ticker: token.ticker,
+            token_ca: token.token_ca,
+            image_url: token.image_url,
+            price: trade.price,
+            type: String(trade.type || "").trim().toLowerCase(),
+            timestamp: Number(trade.t || trade.timestamp || 0),
+            tx: trade.tx
+          }));
+        } catch (error) {
+          console.error(`Trade error for ${token.name}:`, error);
+          return [];
+        }
+      })
+    );
 
     const allTrades = tradeResults.flat();
 
-    const validTrades =
-      allTrades.filter(trade =>
+    const validTrades = allTrades
+      .filter(trade =>
         trade.timestamp > 0 &&
-        (
-          trade.type === "buy" ||
-          trade.type === "sell"
-        )
+        (trade.type === "buy" || trade.type === "sell")
+      )
+      .sort(
+        (a, b) =>
+          Number(b.timestamp || 0) -
+          Number(a.timestamp || 0)
       );
 
-    const tokenGroups = {};
+    // Keep the newest 15 trades, but make sure a SELL is not
+    // accidentally hidden when Sikka has a SELL in the returned data.
+    let latestTrades = validTrades.slice(0, 15);
 
-    for (const trade of validTrades) {
-      if (!tokenGroups[trade.token_ca]) {
-        tokenGroups[trade.token_ca] = {
-          buy: null,
-          sell: null
-        };
-      }
-
-      const group =
-        tokenGroups[trade.token_ca];
-
-      if (
-        trade.type === "buy" &&
-        (
-          !group.buy ||
-          trade.timestamp > group.buy.timestamp
-        )
-      ) {
-        group.buy = trade;
-      }
-
-      if (
-        trade.type === "sell" &&
-        (
-          !group.sell ||
-          trade.timestamp > group.sell.timestamp
-        )
-      ) {
-        group.sell = trade;
-      }
-    }
-
-    const selectedTrades = [];
-
-    for (const tokenCa in tokenGroups) {
-      const group = tokenGroups[tokenCa];
-
-      if (group.buy) {
-        selectedTrades.push(group.buy);
-      }
-
-      if (group.sell) {
-        selectedTrades.push(group.sell);
-      }
-    }
-
-    selectedTrades.sort(
-      (a, b) =>
-        Number(b.timestamp || 0) -
-        Number(a.timestamp || 0)
+    const hasSell = latestTrades.some(
+      trade => trade.type === "sell"
     );
 
-    const latestTrades =
-      selectedTrades.slice(0, 15);
+    if (!hasSell) {
+      const latestSell = validTrades.find(
+        trade => trade.type === "sell"
+      );
+
+      if (latestSell) {
+        latestTrades = [
+          ...latestTrades.slice(0, 14),
+          latestSell
+        ].sort(
+          (a, b) =>
+            Number(b.timestamp || 0) -
+            Number(a.timestamp || 0)
+        );
+      }
+    }
 
     return res.status(200).json({
       success: true,
@@ -163,10 +113,7 @@ export default async function handler(req, res) {
       checkedAt: new Date().toISOString()
     });
   } catch (error) {
-    console.error(
-      "Sikka live trades error:",
-      error
-    );
+    console.error("Sikka live trades error:", error);
 
     return res.status(500).json({
       success: false,
