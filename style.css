@@ -1577,3 +1577,132 @@ padding-top: 22px;
   }
 
 }
+/*Trade*/
+.sikka-trades-card {
+  width: 100%;
+  min-height: 100%;
+  padding: 22px;
+  box-sizing: border-box;
+}
+
+.sikka-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 20px;
+}
+
+.live-dot {
+  width: 8px;
+  height: 8px;
+  background: #00ff88;
+  border-radius: 50%;
+  box-shadow: 0 0 10px #00ff88;
+  animation: livePulse 1.2s infinite;
+}
+
+.sikka-table {
+  width: 100%;
+}
+
+.sikka-header,
+.sikka-row {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr 1.4fr;
+  align-items: center;
+  gap: 15px;
+}
+
+.sikka-header {
+  padding: 10px 12px;
+  color: #9b9ba5;
+  font-size: 12px;
+  font-weight: 700;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.sikka-row {
+  padding: 14px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  transition: background 0.2s ease;
+}
+
+.sikka-row:hover {
+  background: rgba(255,255,255,0.04);
+}
+
+.token-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+}
+
+.trade-token-logo {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+  border-radius: 50%;
+}
+
+.trade-action {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.trade-action.buy {
+  color: #00e676;
+}
+
+.trade-action.sell {
+  color: #ff4d5d;
+}
+
+.trade-price {
+  font-weight: 600;
+  color: #ffffff;
+  font-family: monospace;
+}
+
+.sikka-updated {
+  margin-top: 15px;
+  font-size: 11px;
+  color: #7d7d88;
+}
+
+@keyframes livePulse {
+  0% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.3;
+  }
+
+  100% {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 600px) {
+
+  .sikka-header,
+  .sikka-row {
+    grid-template-columns: 1.2fr 0.9fr 1.3fr;
+    gap: 8px;
+  }
+
+  .sikka-row {
+    padding: 12px 5px;
+  }
+
+  .trade-price {
+    font-size: 12px;
+  }
+
+  .trade-action {
+    font-size: 12px;
+  }
+}
