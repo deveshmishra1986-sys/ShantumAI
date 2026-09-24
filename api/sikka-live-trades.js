@@ -3,17 +3,11 @@ const SIKKA_BASE_URL =
 
 export default async function handler(req, res) {
   try {
-    // --------------------------------------------------
-    // 1. GET ACTIVE / MOVING TOKENS
-    // --------------------------------------------------
-
     const moversResponse = await fetch(
       `${SIKKA_BASE_URL}/tokens/movers`,
       {
         cache: "no-store",
-        headers: {
-          Accept: "application/json"
-        }
+        headers: { Accept: "application/json" }
       }
     );
 
@@ -23,8 +17,7 @@ export default async function handler(req, res) {
       );
     }
 
-    const moversResult =
-      await moversResponse.json();
+    const moversResult = await moversResponse.json();
 
     const tokens =
       moversResult?.data?.movers || [];
@@ -36,10 +29,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // --------------------------------------------------
-    // 2. TAKE MORE ACTIVE TOKENS
-    // --------------------------------------------------
-
     const activeTokens =
       tokens
         .filter(token =>
@@ -48,16 +37,10 @@ export default async function handler(req, res) {
         )
         .slice(0, 50);
 
-    // --------------------------------------------------
-    // 3. GET TRADES FOR EACH TOKEN
-    // --------------------------------------------------
-
     const tradeResults =
       await Promise.all(
         activeTokens.map(async token => {
-
           try {
-
             const tradeResponse =
               await fetch(
                 `${SIKKA_BASE_URL}/tokens/${token.token_ca}/trades`,
@@ -83,12 +66,6 @@ export default async function handler(req, res) {
                   ? tradeResult.data.data
                   : [];
 
-            if (!Array.isArray(trades)) {
-              return [];
-            }
-
-            // Keep enough records so we can find
-            // the latest BUY and latest SELL.
             return trades
               .slice(0, 20)
               .map(trade => ({
@@ -101,30 +78,17 @@ export default async function handler(req, res) {
                 timestamp: Number(trade.t || 0),
                 tx: trade.tx
               }));
-
           } catch (error) {
-
             console.error(
               `Trade error for ${token.name}:`,
               error
             );
-
             return [];
           }
-
         })
       );
 
-    // --------------------------------------------------
-    // 4. COMBINE ALL TRADES
-    // --------------------------------------------------
-
-    const allTrades =
-      tradeResults.flat();
-
-    // --------------------------------------------------
-    // 5. KEEP ONLY VALID BUY / SELL TRADES
-    // --------------------------------------------------
+    const allTrades = tradeResults.flat();
 
     const validTrades =
       allTrades.filter(trade =>
@@ -135,14 +99,9 @@ export default async function handler(req, res) {
         )
       );
 
-    // --------------------------------------------------
-    // 6. GET LATEST BUY + LATEST SELL FOR EACH TOKEN
-    // --------------------------------------------------
-
     const tokenGroups = {};
 
     for (const trade of validTrades) {
-
       if (!tokenGroups[trade.token_ca]) {
         tokenGroups[trade.token_ca] = {
           buy: null,
@@ -174,16 +133,10 @@ export default async function handler(req, res) {
       }
     }
 
-    // --------------------------------------------------
-    // 7. COMBINE LATEST BUY + SELL
-    // --------------------------------------------------
-
     const selectedTrades = [];
 
     for (const tokenCa in tokenGroups) {
-
-      const group =
-        tokenGroups[tokenCa];
+      const group = tokenGroups[tokenCa];
 
       if (group.buy) {
         selectedTrades.push(group.buy);
@@ -194,19 +147,11 @@ export default async function handler(req, res) {
       }
     }
 
-    // --------------------------------------------------
-    // 8. SORT NEWEST FIRST
-    // --------------------------------------------------
-
     selectedTrades.sort(
       (a, b) =>
         Number(b.timestamp || 0) -
         Number(a.timestamp || 0)
     );
-
-    // --------------------------------------------------
-    // 9. RETURN LATEST 15 BUY / SELL TRADES
-    // --------------------------------------------------
 
     const latestTrades =
       selectedTrades.slice(0, 15);
@@ -217,9 +162,7 @@ export default async function handler(req, res) {
       trades: latestTrades,
       checkedAt: new Date().toISOString()
     });
-
   } catch (error) {
-
     console.error(
       "Sikka live trades error:",
       error
