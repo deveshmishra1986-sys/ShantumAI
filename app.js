@@ -248,7 +248,7 @@ async function loadShantum() {
         <img
           class="coin-logo"
           
-           src="/shantum-logo.png"
+           src="/shantumlogo.png"
           alt="${priceData.symbol}"
           onerror="this.style.display='none';"
         >
