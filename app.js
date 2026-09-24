@@ -610,7 +610,7 @@ window.copyContract =
 
 
 async function loadSikkaTrades() {
-  const card = document.getElementById("shardeum-card");
+  const card = document.getElementById("sikka-trades-card");
 
   if (!card) return;
 
