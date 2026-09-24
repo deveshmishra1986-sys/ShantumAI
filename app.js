@@ -11,7 +11,7 @@ const shantumCard =
   document.getElementById("shantum-card");
 
 const shardeumCard =
-  document.getElementById("shardeum-card");
+  document.getElementById("sikka-trades-card");
 
 const refreshButton =
   document.getElementById("refresh-button");
