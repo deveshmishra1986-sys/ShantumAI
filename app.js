@@ -247,8 +247,7 @@ async function loadShantum() {
 
         <img
           class="coin-logo"
-          
-           src="/shantumlogo.jpg"
+          src="/shantumlogo.jpg"
           alt="${priceData.symbol}"
           onerror="this.style.display='none';"
         >
@@ -703,176 +702,426 @@ setInterval(
 
 
 // ==================================================
-// SHANTUM SIKKA CANDLE CHART
+// SHANTUM SIKKA USD BASELINE CHART
 // ==================================================
 
 let stmChart = null;
+
 let stmCandleSeries = null;
+
 let currentTimeframe = "24h";
 
 
 // --------------------------------------------------
-// LOAD CANDLES
+// LOAD STM CHART
 // --------------------------------------------------
 
-async function loadSTMChart(timeframe = "24h") {
+async function loadSTMChart(
+  timeframe = "24h"
+) {
 
   const chartContainer =
-    document.getElementById("stm-chart");
+    document.getElementById(
+      "stm-chart"
+    );
+
 
   if (!chartContainer) {
     return;
   }
 
+
   try {
 
+    // ----------------------------------------------
+    // LOADING
+    // ----------------------------------------------
+
     chartContainer.innerHTML = `
+
       <div class="chart-loading">
-        Loading STM market data...
+
+        Loading STM/USD market data...
+
       </div>
+
     `;
 
-    const response = await fetch(
-      `/api/sikka-candles?timeframe=${timeframe}&limit=200&_=${Date.now()}`,
-      {
-        cache: "no-store"
-      }
-    );
 
-    if (!response.ok) {
+    // ----------------------------------------------
+    // GET CANDLES + SHM USD PRICE
+    // ----------------------------------------------
+
+    const [
+      candleResponse,
+      shmResponse
+    ] = await Promise.all([
+
+      fetch(
+        `/api/sikka-candles?timeframe=${timeframe}&limit=200&_=${Date.now()}`,
+        {
+          cache: "no-store"
+        }
+      ),
+
+      fetch(
+        `/api/shm-price?_=${Date.now()}`,
+        {
+          cache: "no-store"
+        }
+      )
+
+    ]);
+
+
+    if (!candleResponse.ok) {
+
       throw new Error(
-        `Candle API HTTP ${response.status}`
+        `Candle API HTTP ${candleResponse.status}`
       );
+
     }
 
-    const data = await response.json();
+
+    if (!shmResponse.ok) {
+
+      throw new Error(
+        `SHM/USD API HTTP ${shmResponse.status}`
+      );
+
+    }
+
+
+    const data =
+      await candleResponse.json();
+
+
+    const shmData =
+      await shmResponse.json();
+
+
+    // ----------------------------------------------
+    // VALIDATE CANDLE DATA
+    // ----------------------------------------------
 
     if (
       !data.success ||
       !Array.isArray(data.candles) ||
       data.candles.length === 0
     ) {
+
       throw new Error(
         "No candle data available"
       );
+
     }
 
-    // Clear container
-    chartContainer.innerHTML = "";
 
-    // ------------------------------------------------
-    // CREATE CHART
-    // ------------------------------------------------
+    // ----------------------------------------------
+    // SHM/USD PRICE
+    // ----------------------------------------------
 
-    stmChart =
-      LightweightCharts.createChart(
-        chartContainer,
-        {
-          width: chartContainer.clientWidth,
-          height: 430,
+    const shmUsd =
+      Number(shmData.priceUsd);
 
-          layout: {
-            background: {
-              color: "transparent"
-            },
-            textColor: "#aaa"
-          },
 
-          grid: {
-            vertLines: {
-              color: "rgba(255,255,255,0.05)"
-            },
-            horzLines: {
-              color: "rgba(255,255,255,0.05)"
-            }
-          },
+    if (
+      !Number.isFinite(shmUsd) ||
+      shmUsd <= 0
+    ) {
 
-          rightPriceScale: {
-            borderColor:
-              "rgba(255,255,255,0.10)"
-          },
-
-          timeScale: {
-            borderColor:
-              "rgba(255,255,255,0.10)",
-            timeVisible: true
-          }
-        }
+      throw new Error(
+        "SHM/USD price unavailable"
       );
 
-
-    // ------------------------------------------------
-    // CANDLE SERIES
-    // ------------------------------------------------
-
-    stmCandleSeries =
-  stmChart.addSeries(
-    LightweightCharts.CandlestickSeries,
-    {
-      upColor: "#22c55e",
-      downColor: "#ef4444",
-
-      borderUpColor: "#22c55e",
-      borderDownColor: "#ef4444",
-
-      wickUpColor: "#22c55e",
-      wickDownColor: "#ef4444"
     }
-  );
 
-    // ------------------------------------------------
-    // CONVERT SIKKA DATA
-    // ------------------------------------------------
 
-    const candleData =
+    // ----------------------------------------------
+    // REMOVE OLD CHART
+    // ----------------------------------------------
+
+    if (stmChart) {
+
+      try {
+
+        stmChart.remove();
+
+      }
+
+      catch (error) {
+
+        console.warn(
+          "Chart remove warning:",
+          error
+        );
+
+      }
+
+      stmChart = null;
+
+      stmCandleSeries = null;
+
+    }
+
+
+    chartContainer.innerHTML = "";
+
+
+    // ----------------------------------------------
+    // CONVERT STM/SHM → STM/USD
+    // ----------------------------------------------
+
+    const chartData =
       data.candles
+
         .map(candle => {
 
-          return {
-            time: Number(candle.t),
+          const closeSHM =
+            Number(candle.c);
 
-            open: Number(candle.o),
-            high: Number(candle.h),
-            low: Number(candle.l),
-            close: Number(candle.c)
+          const closeUSD =
+            closeSHM * shmUsd;
+
+
+          return {
+
+            time:
+              Number(candle.t),
+
+            value:
+              closeUSD
+
           };
 
         })
-        .filter(candle =>
-          Number.isFinite(candle.open) &&
-          Number.isFinite(candle.high) &&
-          Number.isFinite(candle.low) &&
-          Number.isFinite(candle.close)
-        );
+
+        .filter(point => {
+
+          return (
+
+            Number.isFinite(
+              point.time
+            )
+
+            &&
+
+            Number.isFinite(
+              point.value
+            )
+
+            &&
+
+            point.value >= 0
+
+          );
+
+        });
 
 
-    if (candleData.length === 0) {
+    if (chartData.length === 0) {
+
       throw new Error(
-        "Invalid candle values"
+        "Invalid STM/USD candle values"
       );
+
     }
 
 
-    // ------------------------------------------------
-    // SET DATA
-    // ------------------------------------------------
+    // ----------------------------------------------
+    // BASELINE PRICE
+    // ----------------------------------------------
+
+    const baselinePrice =
+      chartData[0].value;
+
+
+    // ----------------------------------------------
+    // CREATE CHART
+    // ----------------------------------------------
+
+    stmChart =
+      LightweightCharts.createChart(
+
+        chartContainer,
+
+        {
+
+          width:
+            chartContainer.clientWidth,
+
+          height:
+            430,
+
+
+          layout: {
+
+            background: {
+
+              color:
+                "transparent"
+
+            },
+
+            textColor:
+              "#aaa"
+
+          },
+
+
+          grid: {
+
+            vertLines: {
+
+              color:
+                "rgba(255,255,255,0.05)"
+
+            },
+
+            horzLines: {
+
+              color:
+                "rgba(255,255,255,0.05)"
+
+            }
+
+          },
+
+
+          rightPriceScale: {
+
+            borderColor:
+              "rgba(255,255,255,0.10)"
+
+          },
+
+
+          timeScale: {
+
+            borderColor:
+              "rgba(255,255,255,0.10)",
+
+            timeVisible:
+              true
+
+          },
+
+
+          localization: {
+
+            priceFormatter:
+              price => {
+
+                return (
+                  "$" +
+                  Number(price)
+                    .toFixed(9)
+                );
+
+              }
+
+          }
+
+        }
+
+      );
+
+
+    // ----------------------------------------------
+    // BASELINE SERIES
+    // ----------------------------------------------
+
+    stmCandleSeries =
+
+      stmChart.addSeries(
+
+        LightweightCharts.BaselineSeries,
+
+        {
+
+          baseValue: {
+
+            type:
+              "price",
+
+            price:
+              baselinePrice
+
+          },
+
+
+          topLineColor:
+            "#22c55e",
+
+          topFillColor1:
+            "rgba(34,197,94,0.30)",
+
+          topFillColor2:
+            "rgba(34,197,94,0.05)",
+
+
+          bottomLineColor:
+            "#ef4444",
+
+          bottomFillColor1:
+            "rgba(239,68,68,0.05)",
+
+          bottomFillColor2:
+            "rgba(239,68,68,0.30)",
+
+
+          priceFormat: {
+
+            type:
+              "price",
+
+            precision:
+              9,
+
+            minMove:
+              0.000000001
+
+          },
+
+
+          lastValueVisible:
+            true,
+
+          priceLineVisible:
+            true
+
+        }
+
+      );
+
+
+    // ----------------------------------------------
+    // SET CHART DATA
+    // ----------------------------------------------
 
     stmCandleSeries.setData(
-      candleData
+      chartData
     );
 
 
-    // ------------------------------------------------
-    // FIT CONTENT
-    // ------------------------------------------------
+    // ----------------------------------------------
+    // FIT CHART
+    // ----------------------------------------------
 
-    stmChart.timeScale()
+    stmChart
+      .timeScale()
       .fitContent();
 
 
-    // ------------------------------------------------
+    // ----------------------------------------------
     // RESPONSIVE
-    // ------------------------------------------------
+    // ----------------------------------------------
+
+    window.removeEventListener(
+      "resize",
+      resizeSTMChart
+    );
+
 
     window.addEventListener(
       "resize",
@@ -881,21 +1130,33 @@ async function loadSTMChart(timeframe = "24h") {
 
   }
 
+
   catch (error) {
 
     console.error(
-      "STM chart error:",
+      "STM/USD chart error:",
       error
     );
 
+
     chartContainer.innerHTML = `
+
       <div class="chart-error">
-        Unable to load STM market data.
+
+        Unable to load STM/USD market data.
+
         <br>
-        <small>${error.message}</small>
+
+        <small>
+          ${error.message}
+        </small>
+
       </div>
+
     `;
+
   }
+
 }
 
 
@@ -906,7 +1167,10 @@ async function loadSTMChart(timeframe = "24h") {
 function resizeSTMChart() {
 
   const container =
-    document.getElementById("stm-chart");
+    document.getElementById(
+      "stm-chart"
+    );
+
 
   if (
     stmChart &&
@@ -914,11 +1178,15 @@ function resizeSTMChart() {
   ) {
 
     stmChart.resize(
+
       container.clientWidth,
+
       430
+
     );
 
   }
+
 }
 
 
@@ -927,15 +1195,25 @@ function resizeSTMChart() {
 // --------------------------------------------------
 
 document
-  .querySelectorAll(".timeframe-button")
+  .querySelectorAll(
+    ".timeframe-button"
+  )
   .forEach(button => {
 
     button.addEventListener(
+
       "click",
+
       function () {
 
         const timeframe =
           this.dataset.timeframe;
+
+
+        if (!timeframe) {
+          return;
+        }
+
 
         currentTimeframe =
           timeframe;
@@ -946,9 +1224,11 @@ document
             ".timeframe-button"
           )
           .forEach(btn => {
+
             btn.classList.remove(
               "active"
             );
+
           });
 
 
@@ -962,6 +1242,7 @@ document
         );
 
       }
+
     );
 
   });
@@ -969,6 +1250,7 @@ document
 
 // --------------------------------------------------
 // INITIAL CHART
+// DEFAULT = 24 HOURS
 // --------------------------------------------------
 
 loadSTMChart("24h");
