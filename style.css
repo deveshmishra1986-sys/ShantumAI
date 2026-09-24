@@ -1706,3 +1706,51 @@ padding-top: 22px;
     font-size: 12px;
   }
 }
+
+.sikka-trades-card {
+  width: 100%;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.sikka-title {
+  font-size: 18px;
+  margin-bottom: 18px;
+}
+
+.sikka-table {
+  width: 100%;
+}
+
+.sikka-header,
+.sikka-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1.5fr;
+  align-items: center;
+  gap: 20px;
+}
+
+.sikka-header {
+  padding: 12px 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.sikka-row {
+  min-height: 48px;
+  padding: 8px 10px;
+}
+
+.token-name {
+  font-size: 14px;
+}
+
+.trade-action {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.trade-price {
+  font-size: 13px;
+  white-space: nowrap;
+}
