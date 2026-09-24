@@ -47,7 +47,7 @@ async function refreshDashboard() {
 
     await Promise.all([
       loadShantum(),
-      loadShardeum()
+      loadSikkaTrades();
     ]);
 
   } finally {
@@ -607,145 +607,122 @@ window.copyContract =
 // LOAD SHARDEUM
 // --------------------------------------------------
 
-async function loadShardeum() {
+
+
+async function loadSikkaTrades() {
+  const card = document.getElementById("shardeum-card");
+
+  if (!card) return;
 
   try {
+    const SHANTUM_CONTRACT =
+      "0x3Fe5fbBA8034762fDd8d3d3b3dD7E788B9a12F04";
 
-    const response =
-      await fetch(
-        `/api/shm-price?_=${Date.now()}`,
-        {
-          cache: "no-store"
-        }
-      );
-
-
-    if (!response.ok) {
-
-      throw new Error(
-        `SHM HTTP ${response.status}`
-      );
-
-    }
-
-
-    const data =
-      await response.json();
-
-
-    let priceText =
-      "Unavailable";
-
-
-    if (
-      data.success &&
-      data.priceUsd !== undefined &&
-      data.priceUsd !== null
-    ) {
-
-      priceText =
-        "$" +
-        Number(data.priceUsd).toFixed(8);
-
-    }
-
-
-    shardeumCard.innerHTML = `
-
-      <div class="coin-header">
-
-        <img
-          class="coin-logo"
-          src="/shardeum-logo.png"
-          alt="SHM"
-          onerror="this.style.display='none';"
-        >
-
-        <div>
-
-          <h2>
-            Shardeum
-          </h2>
-
-          <span>
-            SHM
-          </span>
-
-        </div>
-
-      </div>
-
-
-      <div class="coin-price">
-
-        ${priceText}
-
-      </div>
-
-
-      <div class="coin-info">
-
-        <div>
-
-          <small>
-            Network
-          </small>
-
-          <strong>
-            Shardeum
-          </strong>
-
-        </div>
-
-
-        <div>
-
-          <small>
-            Chain ID
-          </small>
-
-          <strong>
-            8118
-          </strong>
-
-        </div>
-
-      </div>
-
-
-      <a
-        class="explorer-button interactive-button"
-        href="https://explorer.shardeum.org/"
-        target="_blank"
-        rel="noopener noreferrer"
-      >
-        View Explorer ↗
-      </a>
-
-    `;
-
-  }
-
-  catch (error) {
-
-    console.error(
-      "Shardeum error:",
-      error
+    const response = await fetch(
+      `/api/sikka-trades?token=${SHANTUM_CONTRACT}&_=${Date.now()}`,
+      {
+        cache: "no-store"
+      }
     );
 
+    const result = await response.json();
 
-    shardeumCard.innerHTML = `
+    if (!result.success) {
+      throw new Error(result.error || "Unable to load trades");
+    }
 
-      <div class="error">
+    const trades = result.data?.data || [];
 
-        Unable to load Shardeum data.
+    if (!trades.length) {
+      card.innerHTML = `
+        <div class="sikka-trades-card">
+          <h2>🔥 LIVE SIKKA TRADES</h2>
+          <p>No trades found.</p>
+        </div>
+      `;
+      return;
+    }
+
+    const latestTrades = trades.slice(0, 10);
+
+    card.innerHTML = `
+      <div class="sikka-trades-card">
+
+        <div class="sikka-title">
+          <span>🔥</span>
+          <span>LIVE SIKKA TRADES</span>
+          <span class="live-dot"></span>
+        </div>
+
+        <div class="sikka-table">
+
+          <div class="sikka-header">
+            <div>TOKEN</div>
+            <div>ACTION</div>
+            <div>PRICE</div>
+          </div>
+
+          ${latestTrades.map(trade => {
+
+            const isBuy =
+              String(trade.type).toLowerCase() === "buy";
+
+            const actionClass =
+              isBuy ? "buy" : "sell";
+
+            const actionText =
+              isBuy ? "BUY" : "SELL";
+
+            const price =
+              Number(trade.price || 0).toFixed(9);
+
+            return `
+              <div class="sikka-row">
+
+                <div class="token-name">
+                  <img
+                    src="/shantum-logo.png"
+                    class="trade-token-logo"
+                    onerror="this.style.display='none'"
+                  >
+                  <span>Shantum</span>
+                </div>
+
+                <div class="trade-action ${actionClass}">
+                  ${isBuy ? "🟢" : "🔴"} ${actionText}
+                </div>
+
+                <div class="trade-price">
+                  ${price} SHM
+                </div>
+
+              </div>
+            `;
+
+          }).join("")}
+
+        </div>
+
+        <div class="sikka-updated">
+          ● Live data from Sikka
+        </div>
 
       </div>
-
     `;
 
-  }
+  } catch (error) {
 
+    console.error("Sikka trades error:", error);
+
+    card.innerHTML = `
+      <div class="sikka-trades-card">
+        <h2>🔥 LIVE SIKKA TRADES</h2>
+        <p style="color:#ff5555;">
+          Unable to load live trades
+        </p>
+      </div>
+    `;
+  }
 }
 
 
@@ -754,8 +731,8 @@ async function loadShardeum() {
 // --------------------------------------------------
 
 loadShantum();
+loadSikkaTrades();
 
-loadShardeum();
 
 
 // --------------------------------------------------
@@ -769,7 +746,7 @@ setInterval(
 
       loadShantum();
 
-      loadShardeum();
+      loadSikkaTrades();
 
     }
 
