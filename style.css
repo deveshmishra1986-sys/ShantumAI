@@ -1408,3 +1408,172 @@ padding-top: 22px;
   }
 
 }
+
+/* ==================================================
+   SHANTUM MARKET CHART
+   ================================================== */
+
+.chart-section {
+  width: 100%;
+  margin-top: 40px;
+}
+
+.chart-card {
+  width: 100%;
+  padding: 30px;
+
+  border-radius: 24px;
+
+  background:
+    linear-gradient(
+      145deg,
+      rgba(50, 20, 80, 0.75),
+      rgba(10, 8, 25, 0.95)
+    );
+
+  border: 1px solid
+    rgba(156, 60, 255, 0.35);
+
+  box-shadow:
+    0 0 40px
+    rgba(110, 35, 180, 0.12);
+}
+
+
+.chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 20px;
+
+  margin-bottom: 25px;
+}
+
+
+.chart-header h2 {
+  margin: 0 0 5px;
+
+  font-size: 26px;
+  color: #ffffff;
+}
+
+
+.chart-header span {
+  color: #a99ab8;
+  font-size: 14px;
+}
+
+
+.chart-timeframes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+
+.timeframe-button {
+  padding: 8px 13px;
+
+  border-radius: 8px;
+
+  border: 1px solid
+    rgba(255,255,255,0.12);
+
+  background:
+    rgba(255,255,255,0.04);
+
+  color: #aaa;
+
+  cursor: pointer;
+
+  font-size: 13px;
+  font-weight: 600;
+
+  transition: all 0.2s ease;
+}
+
+
+.timeframe-button:hover {
+  color: #ffffff;
+
+  border-color:
+    rgba(156,60,255,0.6);
+}
+
+
+.timeframe-button.active {
+  color: #ffffff;
+
+  background:
+    rgba(130,45,220,0.25);
+
+  border-color:
+    rgba(170,80,255,0.8);
+
+  box-shadow:
+    0 0 12px
+    rgba(150,50,255,0.18);
+}
+
+
+.stm-chart {
+  width: 100%;
+  height: 430px;
+
+  border-radius: 16px;
+
+  overflow: hidden;
+
+  background:
+    rgba(5,5,15,0.55);
+}
+
+
+.chart-loading,
+.chart-error {
+  width: 100%;
+  height: 100%;
+
+  display: flex;
+
+  align-items: center;
+  justify-content: center;
+
+  text-align: center;
+
+  color: #aaa;
+
+  font-size: 15px;
+}
+
+
+.chart-error {
+  color: #ff7b7b;
+}
+
+
+@media (max-width: 760px) {
+
+  .chart-card {
+    padding: 20px;
+  }
+
+  .chart-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .chart-timeframes {
+    width: 100%;
+  }
+
+  .timeframe-button {
+    flex: 1;
+  }
+
+  .stm-chart {
+    height: 350px;
+  }
+
+}
