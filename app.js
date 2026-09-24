@@ -95,41 +95,54 @@ async function loadShantum() {
 
   try {
 
-    const [priceResponse, infoResponse] =
-      await Promise.all([
+    const [
+      priceResponse,
+      infoResponse,
+      shmResponse
+    ] = await Promise.all([
 
-        fetch(
-          `/api/shantum-price?_=${Date.now()}`,
-          {
-            cache: "no-store"
-          }
-        ),
+      fetch(
+        `/api/shantum-price?_=${Date.now()}`,
+        {
+          cache: "no-store"
+        }
+      ),
 
-        fetch(
-          `/api/shantum?_=${Date.now()}`,
-          {
-            cache: "no-store"
-          }
-        )
+      fetch(
+        `/api/shantum?_=${Date.now()}`,
+        {
+          cache: "no-store"
+        }
+      ),
 
-      ]);
+      fetch(
+        `/api/shm-price?_=${Date.now()}`,
+        {
+          cache: "no-store"
+        }
+      )
+
+    ]);
 
 
     if (!priceResponse.ok) {
-
       throw new Error(
         `Shantum price HTTP ${priceResponse.status}`
       );
-
     }
 
 
     if (!infoResponse.ok) {
-
       throw new Error(
         `Shantum info HTTP ${infoResponse.status}`
       );
+    }
 
+
+    if (!shmResponse.ok) {
+      throw new Error(
+        `SHM price HTTP ${shmResponse.status}`
+      );
     }
 
 
@@ -139,14 +152,60 @@ async function loadShantum() {
     const infoData =
       await infoResponse.json();
 
+    const shmData =
+      await shmResponse.json();
+
+
+    // ----------------------------------------------
+    // STM / SHM PRICE
+    // ----------------------------------------------
 
     const price =
       Number(priceData.price);
 
 
+    // ----------------------------------------------
+    // SHM / USD PRICE
+    // ----------------------------------------------
+
+    const shmUsd =
+      Number(shmData.priceUsd);
+
+
+    if (
+      !Number.isFinite(price) ||
+      price < 0
+    ) {
+      throw new Error(
+        "Invalid Shantum price"
+      );
+    }
+
+
+    if (
+      !Number.isFinite(shmUsd) ||
+      shmUsd <= 0
+    ) {
+      throw new Error(
+        "SHM/USD price unavailable"
+      );
+    }
+
+
+    // ----------------------------------------------
+    // STM / USD PRICE
+    // ----------------------------------------------
+
+    const stmUsd =
+      price * shmUsd;
+
+
+    // ----------------------------------------------
+    // SUPPLY
+    // ----------------------------------------------
+
     const currentSupply =
       Number(infoData.currentSupply);
-
 
     const maxSupply =
       Number(infoData.maxSupply);
@@ -162,17 +221,17 @@ async function loadShantum() {
       maxSupply > 0 &&
       currentSupply >= 0
     ) {
-
       supplyPercentage =
         (currentSupply / maxSupply) * 100;
-
     }
 
 
-    // Keep percentage sensible
     supplyPercentage =
       Math.min(
-        Math.max(supplyPercentage, 0),
+        Math.max(
+          supplyPercentage,
+          0
+        ),
         100
       );
 
@@ -190,7 +249,7 @@ async function loadShantum() {
 
 
     // ----------------------------------------------
-    // CONTRACT BUTTON
+    // CONTRACT SECTION
     // ----------------------------------------------
 
     let contractSection = "";
@@ -267,9 +326,27 @@ async function loadShantum() {
       </div>
 
 
+      <!-- STM USD PRICE -->
+
       <div class="coin-price">
 
-        ${price.toFixed(6)} SHM
+        $${stmUsd.toFixed(9)}
+
+      </div>
+
+
+      <!-- STM / SHM PRICE -->
+
+      <div
+        style="
+          font-size: 14px;
+          opacity: 0.65;
+          margin-top: -12px;
+          margin-bottom: 20px;
+        "
+      >
+
+        ${price.toFixed(9)} SHM
 
       </div>
 
