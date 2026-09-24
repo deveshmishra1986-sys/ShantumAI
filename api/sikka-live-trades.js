@@ -37,7 +37,7 @@ export default async function handler(req, res) {
     }
 
     // --------------------------------------------------
-    // 2. TAKE ACTIVE TOKENS
+    // 2. TAKE MORE ACTIVE TOKENS
     // --------------------------------------------------
 
     const activeTokens =
@@ -46,10 +46,10 @@ export default async function handler(req, res) {
           token.token_ca &&
           token.name
         )
-        .slice(0, 20);
+        .slice(0, 50);
 
     // --------------------------------------------------
-    // 3. GET LATEST TRADES FOR EACH TOKEN
+    // 3. GET TRADES FOR EACH TOKEN
     // --------------------------------------------------
 
     const tradeResults =
@@ -77,23 +77,28 @@ export default async function handler(req, res) {
               await tradeResponse.json();
 
             const trades =
-              tradeResult?.data || [];
+              Array.isArray(tradeResult?.data)
+                ? tradeResult.data
+                : Array.isArray(tradeResult?.data?.data)
+                  ? tradeResult.data.data
+                  : [];
 
             if (!Array.isArray(trades)) {
               return [];
             }
 
-            // Add token information
+            // Keep enough records so we can find
+            // the latest BUY and latest SELL.
             return trades
-              .slice(0, 10)
+              .slice(0, 20)
               .map(trade => ({
                 name: token.name,
                 ticker: token.ticker,
                 token_ca: token.token_ca,
                 image_url: token.image_url,
                 price: trade.price,
-                type: trade.type,
-                timestamp: trade.t,
+                type: String(trade.type || "").toLowerCase(),
+                timestamp: Number(trade.t || 0),
                 tx: trade.tx
               }));
 
@@ -118,21 +123,93 @@ export default async function handler(req, res) {
       tradeResults.flat();
 
     // --------------------------------------------------
-    // 5. SORT LATEST FIRST
+    // 5. KEEP ONLY VALID BUY / SELL TRADES
     // --------------------------------------------------
 
-    allTrades.sort(
+    const validTrades =
+      allTrades.filter(trade =>
+        trade.timestamp > 0 &&
+        (
+          trade.type === "buy" ||
+          trade.type === "sell"
+        )
+      );
+
+    // --------------------------------------------------
+    // 6. GET LATEST BUY + LATEST SELL FOR EACH TOKEN
+    // --------------------------------------------------
+
+    const tokenGroups = {};
+
+    for (const trade of validTrades) {
+
+      if (!tokenGroups[trade.token_ca]) {
+        tokenGroups[trade.token_ca] = {
+          buy: null,
+          sell: null
+        };
+      }
+
+      const group =
+        tokenGroups[trade.token_ca];
+
+      if (
+        trade.type === "buy" &&
+        (
+          !group.buy ||
+          trade.timestamp > group.buy.timestamp
+        )
+      ) {
+        group.buy = trade;
+      }
+
+      if (
+        trade.type === "sell" &&
+        (
+          !group.sell ||
+          trade.timestamp > group.sell.timestamp
+        )
+      ) {
+        group.sell = trade;
+      }
+    }
+
+    // --------------------------------------------------
+    // 7. COMBINE LATEST BUY + SELL
+    // --------------------------------------------------
+
+    const selectedTrades = [];
+
+    for (const tokenCa in tokenGroups) {
+
+      const group =
+        tokenGroups[tokenCa];
+
+      if (group.buy) {
+        selectedTrades.push(group.buy);
+      }
+
+      if (group.sell) {
+        selectedTrades.push(group.sell);
+      }
+    }
+
+    // --------------------------------------------------
+    // 8. SORT NEWEST FIRST
+    // --------------------------------------------------
+
+    selectedTrades.sort(
       (a, b) =>
         Number(b.timestamp || 0) -
         Number(a.timestamp || 0)
     );
 
     // --------------------------------------------------
-    // 6. RETURN LATEST 15 TRADES
+    // 9. RETURN LATEST 15 BUY / SELL TRADES
     // --------------------------------------------------
 
     const latestTrades =
-      allTrades.slice(0, 15);
+      selectedTrades.slice(0, 15);
 
     return res.status(200).json({
       success: true,
