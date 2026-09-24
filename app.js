@@ -610,62 +610,87 @@ window.copyContract =
 
 
 async function loadSikkaTrades() {
-  const card = document.getElementById("sikka-trades-card");
+
+  const card =
+    document.getElementById("sikka-trades-card") ||
+    document.getElementById("shardeum-card");
 
   if (!card) return;
 
   try {
-    const SHANTUM_CONTRACT =
-      "0x3Fe5fbBA8034762fDd8d3d3b3dD7E788B9a12F04";
 
     const response = await fetch(
-      `/api/sikka-trades?token=${SHANTUM_CONTRACT}&_=${Date.now()}`,
+      `/api/sikka-live-trades?_=${Date.now()}`,
       {
         cache: "no-store"
       }
     );
 
-    const result = await response.json();
+    const result =
+      await response.json();
 
     if (!result.success) {
-      throw new Error(result.error || "Unable to load trades");
+      throw new Error(
+        result.error || "Unable to load trades"
+      );
     }
 
-    const trades = result.data?.data || [];
+    const trades =
+      result.trades || [];
 
     if (!trades.length) {
+
       card.innerHTML = `
         <div class="sikka-trades-card">
-          <h2>🔥 LIVE SIKKA TRADES</h2>
-          <p>No trades found.</p>
+
+          <div class="sikka-title">
+            <span>🔥</span>
+            <span>LIVE SIKKA TRADES</span>
+          </div>
+
+          <p>No live trades found.</p>
+
         </div>
       `;
+
       return;
     }
 
-    const latestTrades = trades.slice(0, 10);
-
     card.innerHTML = `
+
       <div class="sikka-trades-card">
 
         <div class="sikka-title">
+
           <span>🔥</span>
-          <span>LIVE SIKKA TRADES</span>
+
+          <span>
+            LIVE SIKKA TRADES
+          </span>
+
           <span class="live-dot"></span>
+
         </div>
+
 
         <div class="sikka-table">
 
           <div class="sikka-header">
+
             <div>TOKEN</div>
+
             <div>ACTION</div>
+
             <div>PRICE</div>
+
           </div>
 
-          ${latestTrades.map(trade => {
+
+          ${trades.map(trade => {
 
             const isBuy =
-              String(trade.type).toLowerCase() === "buy";
+              String(trade.type)
+                .toLowerCase() === "buy";
 
             const actionClass =
               isBuy ? "buy" : "sell";
@@ -674,58 +699,97 @@ async function loadSikkaTrades() {
               isBuy ? "BUY" : "SELL";
 
             const price =
-              Number(trade.price || 0).toFixed(9);
+              Number(trade.price || 0)
+                .toFixed(9);
+
 
             return `
+
               <div class="sikka-row">
 
                 <div class="token-name">
-                  <img
-                    src="/shantum-logo.png"
-                    class="trade-token-logo"
-                    onerror="this.style.display='none'"
-                  >
-                  <span>Shantum</span>
+
+                  ${
+                    trade.image_url
+                      ? `
+                        <img
+                          src="${trade.image_url}"
+                          class="trade-token-logo"
+                          onerror="this.style.display='none'"
+                        >
+                      `
+                      : ""
+                  }
+
+                  <span>
+                    ${trade.name || trade.ticker || "Unknown"}
+                  </span>
+
                 </div>
 
-                <div class="trade-action ${actionClass}">
-                  ${isBuy ? "🟢" : "🔴"} ${actionText}
+
+                <div
+                  class="trade-action ${actionClass}"
+                >
+
+                  ${
+                    isBuy
+                      ? "🟢 BUY"
+                      : "🔴 SELL"
+                  }
+
                 </div>
+
 
                 <div class="trade-price">
+
                   ${price} SHM
+
                 </div>
 
               </div>
+
             `;
 
           }).join("")}
 
         </div>
 
+
         <div class="sikka-updated">
+
           ● Live data from Sikka
+
         </div>
 
       </div>
+
     `;
 
   } catch (error) {
 
-    console.error("Sikka trades error:", error);
+    console.error(
+      "Sikka trades error:",
+      error
+    );
 
     card.innerHTML = `
+
       <div class="sikka-trades-card">
-        <h2>🔥 LIVE SIKKA TRADES</h2>
+
+        <div class="sikka-title">
+          🔥 LIVE SIKKA TRADES
+        </div>
+
         <p style="color:#ff5555;">
           Unable to load live trades
         </p>
+
       </div>
+
     `;
   }
 }
-
-
 // --------------------------------------------------
 // INITIAL LOAD
 // --------------------------------------------------
