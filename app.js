@@ -733,7 +733,7 @@ async function loadSTMChart(timeframe = "5m") {
     `;
 
     const response = await fetch(
-      `/api/sikka-candles?timeframe=${timeframe}&limit=100&_=${Date.now()}`,
+      `/api/sikka-candles?timeframe=${timeframe}&limit=200&_=${Date.now()}`,
       {
         cache: "no-store"
       }
