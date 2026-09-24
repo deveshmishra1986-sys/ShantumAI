@@ -708,14 +708,14 @@ setInterval(
 
 let stmChart = null;
 let stmCandleSeries = null;
-let currentTimeframe = "5m";
+let currentTimeframe = "24h";
 
 
 // --------------------------------------------------
 // LOAD CANDLES
 // --------------------------------------------------
 
-async function loadSTMChart(timeframe = "5m") {
+async function loadSTMChart(timeframe = "24h") {
 
   const chartContainer =
     document.getElementById("stm-chart");
