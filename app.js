@@ -700,3 +700,273 @@ setInterval(
   },
   60 * 1000
 );
+
+
+// ==================================================
+// SHANTUM SIKKA CANDLE CHART
+// ==================================================
+
+let stmChart = null;
+let stmCandleSeries = null;
+let currentTimeframe = "5m";
+
+
+// --------------------------------------------------
+// LOAD CANDLES
+// --------------------------------------------------
+
+async function loadSTMChart(timeframe = "5m") {
+
+  const chartContainer =
+    document.getElementById("stm-chart");
+
+  if (!chartContainer) {
+    return;
+  }
+
+  try {
+
+    chartContainer.innerHTML = `
+      <div class="chart-loading">
+        Loading STM market data...
+      </div>
+    `;
+
+    const response = await fetch(
+      `/api/sikka-candles?timeframe=${timeframe}&limit=100&_=${Date.now()}`,
+      {
+        cache: "no-store"
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Candle API HTTP ${response.status}`
+      );
+    }
+
+    const data = await response.json();
+
+    if (
+      !data.success ||
+      !Array.isArray(data.candles) ||
+      data.candles.length === 0
+    ) {
+      throw new Error(
+        "No candle data available"
+      );
+    }
+
+    // Clear container
+    chartContainer.innerHTML = "";
+
+    // ------------------------------------------------
+    // CREATE CHART
+    // ------------------------------------------------
+
+    stmChart =
+      LightweightCharts.createChart(
+        chartContainer,
+        {
+          width: chartContainer.clientWidth,
+          height: 430,
+
+          layout: {
+            background: {
+              color: "transparent"
+            },
+            textColor: "#aaa"
+          },
+
+          grid: {
+            vertLines: {
+              color: "rgba(255,255,255,0.05)"
+            },
+            horzLines: {
+              color: "rgba(255,255,255,0.05)"
+            }
+          },
+
+          rightPriceScale: {
+            borderColor:
+              "rgba(255,255,255,0.10)"
+          },
+
+          timeScale: {
+            borderColor:
+              "rgba(255,255,255,0.10)",
+            timeVisible: true
+          }
+        }
+      );
+
+
+    // ------------------------------------------------
+    // CANDLE SERIES
+    // ------------------------------------------------
+
+    stmCandleSeries =
+      stmChart.addCandlestickSeries({
+        upColor: "#22c55e",
+        downColor: "#ef4444",
+
+        borderUpColor: "#22c55e",
+        borderDownColor: "#ef4444",
+
+        wickUpColor: "#22c55e",
+        wickDownColor: "#ef4444"
+      });
+
+
+    // ------------------------------------------------
+    // CONVERT SIKKA DATA
+    // ------------------------------------------------
+
+    const candleData =
+      data.candles
+        .map(candle => {
+
+          return {
+            time: Number(candle.t),
+
+            open: Number(candle.o),
+            high: Number(candle.h),
+            low: Number(candle.l),
+            close: Number(candle.c)
+          };
+
+        })
+        .filter(candle =>
+          Number.isFinite(candle.open) &&
+          Number.isFinite(candle.high) &&
+          Number.isFinite(candle.low) &&
+          Number.isFinite(candle.close)
+        );
+
+
+    if (candleData.length === 0) {
+      throw new Error(
+        "Invalid candle values"
+      );
+    }
+
+
+    // ------------------------------------------------
+    // SET DATA
+    // ------------------------------------------------
+
+    stmCandleSeries.setData(
+      candleData
+    );
+
+
+    // ------------------------------------------------
+    // FIT CONTENT
+    // ------------------------------------------------
+
+    stmChart.timeScale()
+      .fitContent();
+
+
+    // ------------------------------------------------
+    // RESPONSIVE
+    // ------------------------------------------------
+
+    window.addEventListener(
+      "resize",
+      resizeSTMChart
+    );
+
+  }
+
+  catch (error) {
+
+    console.error(
+      "STM chart error:",
+      error
+    );
+
+    chartContainer.innerHTML = `
+      <div class="chart-error">
+        Unable to load STM market data.
+        <br>
+        <small>${error.message}</small>
+      </div>
+    `;
+  }
+}
+
+
+// --------------------------------------------------
+// RESIZE CHART
+// --------------------------------------------------
+
+function resizeSTMChart() {
+
+  const container =
+    document.getElementById("stm-chart");
+
+  if (
+    stmChart &&
+    container
+  ) {
+
+    stmChart.resize(
+      container.clientWidth,
+      430
+    );
+
+  }
+}
+
+
+// --------------------------------------------------
+// TIMEFRAME BUTTONS
+// --------------------------------------------------
+
+document
+  .querySelectorAll(".timeframe-button")
+  .forEach(button => {
+
+    button.addEventListener(
+      "click",
+      function () {
+
+        const timeframe =
+          this.dataset.timeframe;
+
+        currentTimeframe =
+          timeframe;
+
+
+        document
+          .querySelectorAll(
+            ".timeframe-button"
+          )
+          .forEach(btn => {
+            btn.classList.remove(
+              "active"
+            );
+          });
+
+
+        this.classList.add(
+          "active"
+        );
+
+
+        loadSTMChart(
+          timeframe
+        );
+
+      }
+    );
+
+  });
+
+
+// --------------------------------------------------
+// INITIAL CHART
+// --------------------------------------------------
+
+loadSTMChart("5m");
