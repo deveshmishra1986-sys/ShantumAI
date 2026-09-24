@@ -971,4 +971,4 @@ document
 // INITIAL CHART
 // --------------------------------------------------
 
-loadSTMChart("5m");
+loadSTMChart("24h");
