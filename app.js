@@ -175,30 +175,59 @@ async function loadSikkaTrades() {
   if (!tradesCard) return;
 
   try {
-    const response = await fetch(
-      `/api/sikka-live-trades?_=${Date.now()}`,
-      { cache: "no-store" }
-    );
+    const [tradeResponse, shmResponse] = await Promise.all([
+      fetch(`/api/sikka-live-trades?_=${Date.now()}`, {
+        cache: "no-store"
+      }),
+      fetch(`/api/shm-price?_=${Date.now()}`, {
+        cache: "no-store"
+      })
+    ]);
 
-    if (!response.ok) {
-      throw new Error(`Sikka API HTTP ${response.status}`);
+    if (!tradeResponse.ok) {
+      throw new Error(`Sikka API HTTP ${tradeResponse.status}`);
     }
 
-    const data = await response.json();
+    const data = await tradeResponse.json();
+    const shm = shmResponse.ok ? await shmResponse.json() : {};
+    const shmUsd = num(shm.priceUsd);
 
     if (!data.success) {
       throw new Error(data.error || "Sikka API error");
     }
 
-    const tokens = Array.isArray(data.tokens)
-      ? data.tokens
-      : [];
-
     const trades = Array.isArray(data.trades)
-      ? data.trades
+      ? [...data.trades]
       : [];
 
-    const totalTradeCount = num(data.totalTradeCount);
+    // Newest trade first
+    trades.sort(
+      (a, b) => getTradeTimestamp(b) - getTradeTimestamp(a)
+    );
+
+    const totalTradeCount = Number.isFinite(num(data.totalTrades))
+      ? num(data.totalTrades)
+      : trades.length;
+
+    const tokensTracked = Number.isFinite(num(data.tokensTracked))
+      ? num(data.tokensTracked)
+      : new Set(
+          trades
+            .map(t => String(t.token_ca || "").toLowerCase())
+            .filter(Boolean)
+        ).size;
+
+    const buyTrades = Number.isFinite(num(data.buyTrades))
+      ? num(data.buyTrades)
+      : trades.filter(
+          t => String(t.type).toLowerCase() === "buy"
+        ).length;
+
+    const sellTrades = Number.isFinite(num(data.sellTrades))
+      ? num(data.sellTrades)
+      : trades.filter(
+          t => String(t.type).toLowerCase() === "sell"
+        ).length;
 
     const today = new Intl.DateTimeFormat("en-IN", {
       timeZone: "Asia/Kolkata",
@@ -206,29 +235,6 @@ async function loadSikkaTrades() {
       month: "short",
       year: "numeric"
     }).format(new Date());
-
-    // Create a lookup so every individual BUY/SELL row
-    // gets the market data belonging to that token.
-    const tokenMap = {};
-
-    tokens.forEach(token => {
-      const address = String(
-        token.token_ca ||
-        token.contract ||
-        token.address ||
-        ""
-      ).toLowerCase();
-
-      if (address) {
-        tokenMap[address] = token;
-      }
-    });
-
-    // Every individual trade remains visible.
-    // Newest trades appear first.
-    trades.sort(
-      (a, b) => getTradeTimestamp(b) - getTradeTimestamp(a)
-    );
 
     tradesCard.innerHTML = `
       <div class="sikka-trades-card">
@@ -240,7 +246,7 @@ async function loadSikkaTrades() {
         </div>
 
         <div class="sikka-date">
-          ${today}
+          ${esc(today)}
         </div>
 
         <div class="sikka-stats">
@@ -252,7 +258,17 @@ async function loadSikkaTrades() {
 
           <div class="sikka-stat">
             <small>TOKENS</small>
-            <strong>${integer(tokens.length)}</strong>
+            <strong>${integer(tokensTracked)}</strong>
+          </div>
+
+          <div class="sikka-stat">
+            <small>BUY TRADES</small>
+            <strong>${integer(buyTrades)}</strong>
+          </div>
+
+          <div class="sikka-stat">
+            <small>SELL TRADES</small>
+            <strong>${integer(sellTrades)}</strong>
           </div>
 
         </div>
@@ -267,14 +283,12 @@ async function loadSikkaTrades() {
           </div>
 
           <div class="sikka-market-body">
+
             ${
               trades.length
                 ? trades
                     .map(trade =>
-                      renderIndividualTrade(
-                        trade,
-                        tokenMap
-                      )
+                      renderIndividualTrade(trade, shmUsd)
                     )
                     .join("")
                 : `
@@ -283,22 +297,30 @@ async function loadSikkaTrades() {
                   </div>
                 `
             }
+
           </div>
 
         </div>
 
         <div class="sikka-updated">
-          ● Live data from Sikka
+          ● Live data from Sikka.fun
+          ${
+            Number.isFinite(shmUsd)
+              ? ` · SHM $${shmUsd.toFixed(6)}`
+              : ""
+          }
         </div>
 
       </div>
     `;
-  }
-  catch (error) {
+
+  } catch (error) {
+
     console.error("Sikka error:", error);
 
     tradesCard.innerHTML = `
       <div class="sikka-trades-card">
+
         <div class="sikka-title">
           <span>🔥</span>
           <span>LIVE SIKKA TRADES</span>
@@ -311,6 +333,7 @@ async function loadSikkaTrades() {
         <small style="color:#66758c;">
           ${esc(error.message)}
         </small>
+
       </div>
     `;
   }
@@ -321,43 +344,29 @@ async function loadSikkaTrades() {
 // INDIVIDUAL BUY / SELL ROW
 // ==================================================
 
-function renderIndividualTrade(
-  trade,
-  tokenMap
-) {
-  const tokenAddress = String(
-    trade.token_ca ||
-    trade.contract ||
-    trade.address ||
-    ""
-  ).toLowerCase();
-
-  const token = tokenMap[tokenAddress] || {};
+function renderIndividualTrade(trade, shmUsd) {
 
   const name =
     trade.name ||
-    token.name ||
     trade.ticker ||
-    token.ticker ||
+    trade.symbol ||
     "Unknown";
 
   const ticker =
     trade.ticker ||
-    token.ticker ||
-    token.symbol ||
+    trade.symbol ||
     "";
 
   const logo =
     trade.image_url ||
-    token.image_url ||
-    token.image ||
-    token.logo ||
     "";
 
   const image = logo
     ? `<img
          src="${attr(logo)}"
          class="trade-token-logo"
+         alt="${attr(ticker || name)}"
+         loading="lazy"
          onerror="this.style.display='none'"
        >`
     : "";
@@ -378,29 +387,38 @@ function renderIndividualTrade(
     ? "🟢 BUY"
     : "🔴 SELL";
 
-  const tokenPrice = num(
-    trade.priceUsd ??
-    trade.price_usd ??
-    trade.usdPrice ??
-    trade.usd_price ??
-    token.priceUsd ??
-    token.price_usd ??
-    token.usdPrice ??
-    token.usd_price
-  );
+  // Sikka trade.price is the token price in SHM.
+  const shmPrice = num(trade.price);
 
-  const time = formatTradeTime(trade);
+  // Convert SHM/token price to USD.
+  const usdPrice =
+    Number.isFinite(shmPrice) &&
+    Number.isFinite(shmUsd)
+      ? shmPrice * shmUsd
+      : NaN;
+
+  const time =
+    formatTradeTime(trade);
 
   return `
     <div class="sikka-market-row">
 
       <div class="sikka-market-token">
+
         ${image}
 
         <div class="sikka-market-token-text">
-          <strong>${esc(name)}</strong>
-          <span>${esc(ticker)}</span>
+
+          <strong>
+            ${esc(name)}
+          </strong>
+
+          <span>
+            ${esc(ticker)}
+          </span>
+
         </div>
+
       </div>
 
       <div class="sikka-market-action ${actionClass}">
@@ -408,9 +426,37 @@ function renderIndividualTrade(
       </div>
 
       <div class="sikka-market-value">
-        ${Number.isFinite(tokenPrice)
-          ? "$" + price(tokenPrice)
-          : "—"}
+
+        ${
+          Number.isFinite(usdPrice)
+
+            ? `
+              <strong>
+                $${price(usdPrice)}
+              </strong>
+
+              <small>
+                ${
+                  Number.isFinite(shmPrice)
+                    ? price(shmPrice)
+                    : "—"
+                } SHM
+              </small>
+            `
+
+            : Number.isFinite(shmPrice)
+
+              ? `
+                <strong>—</strong>
+
+                <small>
+                  ${price(shmPrice)} SHM
+                </small>
+              `
+
+              : "—"
+        }
+
       </div>
 
       <div class="sikka-market-time">
