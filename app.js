@@ -428,6 +428,8 @@ function getTradeTimestamp(trade) {
     trade.t ||
     trade.createdAt ||
     trade.created_at ||
+    trade.time ||
+    trade.date ||
     0
   );
 
@@ -701,7 +703,7 @@ if (refreshButton) {
 loadShantum();
 loadSikkaTrades();
 
-// Refresh every 60 seconds.
+// Refresh automatically every 20 seconds.
 setInterval(() => {
   if (!isRefreshing) {
     loadShantum();
