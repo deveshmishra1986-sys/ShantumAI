@@ -59,50 +59,29 @@ async function loadShantum() {
   if (!shantumCard) return;
 
   try {
-    // Do NOT let SHM/USD failure block the Shantum card.
-    const [pRes, iRes, sRes] = await Promise.allSettled([
+    const [pRes, iRes, sRes] = await Promise.all([
       fetch(`/api/shantum-price?_=${Date.now()}`, { cache: "no-store" }),
       fetch(`/api/shantum?_=${Date.now()}`, { cache: "no-store" }),
       fetch(`/api/shm-price?_=${Date.now()}`, { cache: "no-store" })
     ]);
 
-    let p = {};
-    let info = {};
-    let shm = {};
-
-    if (pRes.status === "fulfilled" && pRes.value.ok) {
-      try { p = await pRes.value.json(); } catch (_) {}
+    if (!pRes.ok || !iRes.ok || !sRes.ok) {
+      throw new Error("Unable to load Shantum data");
     }
 
-    if (iRes.status === "fulfilled" && iRes.value.ok) {
-      try { info = await iRes.value.json(); } catch (_) {}
-    }
-
-    if (sRes.status === "fulfilled" && sRes.value.ok) {
-      try { shm = await sRes.value.json(); } catch (_) {}
-    }
+    const p = await pRes.json();
+    const info = await iRes.json();
+    const shm = await sRes.json();
 
     const stmShm = num(p.price);
     const shmUsd = num(shm.priceUsd);
-    const stmUsd = Number.isFinite(stmShm) && Number.isFinite(shmUsd)
-      ? stmShm * shmUsd
-      : NaN;
-
+    const stmUsd = stmShm * shmUsd;
     const current = num(info.currentSupply);
     const max = num(info.maxSupply);
-    const pct = Number.isFinite(max) && max > 0 && Number.isFinite(current)
-      ? Math.min(100, Math.max(0, current / max * 100))
-      : 0;
+    const pct = max > 0 ? Math.min(100, Math.max(0, current / max * 100)) : 0;
 
     const contract =
-      info.contractAddress || info.address ||
-      p.contractAddress || p.address ||
-      "0x3Fe5fbBA8034762fDd8d3d3b3dD7E788B9a12F04";
-
-    const name = p.name || info.name || "Shantum";
-    const symbol = p.symbol || info.symbol || "STM";
-    const explorer = p.explorer ||
-      `https://explorer.shardeum.org/address/${contract}`;
+      info.contractAddress || info.address || p.contractAddress || p.address || "";
 
     shantumCard.innerHTML = `
       <div class="coin-header">
@@ -110,29 +89,27 @@ async function loadShantum() {
              alt="STM"
              onerror="this.onerror=null;this.src='/shantum-logo.png';">
         <div>
-          <h2>${esc(name)}</h2>
-          <span>${esc(symbol)}</span>
+          <h2>${esc(p.name || "Shantum")}</h2>
+          <span>${esc(p.symbol || "STM")}</span>
         </div>
       </div>
 
       <div class="coin-price">
-        ${Number.isFinite(stmUsd) ? "$" + stmUsd.toFixed(9) :
-          (Number.isFinite(stmShm) ? stmShm.toFixed(9) + " SHM" : "—")}
+        $${Number.isFinite(stmUsd) ? stmUsd.toFixed(9) : "—"}
       </div>
 
       <div style="font-size:14px;opacity:.65;margin-top:-12px;margin-bottom:20px;">
-        ${Number.isFinite(stmShm) ? stmShm.toFixed(9) + " SHM" : "Price unavailable"}
-        ${Number.isFinite(shmUsd) ? " · SHM $" + shmUsd.toFixed(6) : ""}
+        ${Number.isFinite(stmShm) ? stmShm.toFixed(9) : "—"} SHM
       </div>
 
       <div class="coin-info">
         <div>
           <small>Current Supply</small>
-          <strong>${Number.isFinite(current) ? integer(current) + " STM" : "—"}</strong>
+          <strong>${integer(current)} STM</strong>
         </div>
         <div>
           <small>Max Supply</small>
-          <strong>${Number.isFinite(max) ? integer(max) + " STM" : "1,000,000,000 STM"}</strong>
+          <strong>${integer(max)} STM</strong>
         </div>
       </div>
 
@@ -146,18 +123,19 @@ async function loadShantum() {
         </div>
       </div>
 
-      <div class="contract-section">
-        <small>Contract Address</small>
-        <div class="contract-row">
-          <span class="contract-address" title="${attr(contract)}">${esc(contract)}</span>
-          <button class="copy-button" type="button"
-            data-address="${attr(contract)}" onclick="copyContract(this)">Copy</button>
-        </div>
-        <div class="copy-status" id="copy-status"></div>
-      </div>
+      ${contract ? `
+        <div class="contract-section">
+          <small>Contract Address</small>
+          <div class="contract-row">
+            <span class="contract-address" title="${attr(contract)}">${esc(contract)}</span>
+            <button class="copy-button" type="button"
+              data-address="${attr(contract)}" onclick="copyContract(this)">Copy</button>
+          </div>
+          <div class="copy-status" id="copy-status"></div>
+        </div>` : ""}
 
       <a class="explorer-button interactive-button"
-         href="${attr(explorer)}"
+         href="${attr(p.explorer || "https://explorer.shardeum.org/")}"
          target="_blank" rel="noopener noreferrer">View Explorer ↗</a>
 
       <div class="social-links">
@@ -171,7 +149,7 @@ async function loadShantum() {
     `;
   } catch (e) {
     console.error("Shantum error:", e);
-    shantumCard.innerHTML = `<div class="error">Unable to load Shantum data.<br><small>${esc(e.message)}</small></div>`;
+    shantumCard.innerHTML = `<div class="error">Unable to load Shantum data.</div>`;
   }
 }
 
@@ -284,12 +262,7 @@ async function loadSikkaTrades() {
           <div class="sikka-market-header">
             <div>TOKEN</div>
             <div>ACTION</div>
-           <div>PRICE</div>
-            <div>TXNS</div>
-         
-    <!--   <div>VOLUME</div>
-     <div>MCAP</div>
-            <div>TRADERS</div>-->
+            <div>PRICE</div>
             <div>TIME</div>
           </div>
 
@@ -405,13 +378,6 @@ function renderIndividualTrade(
     ? "🟢 BUY"
     : "🔴 SELL";
 
-  const mcap = num(
-    token.marketCapUsd ??
-    token.market_cap_usd ??
-    token.marketCapUSD ??
-    token.marketCap
-  );
-
   const tokenPrice = num(
     trade.priceUsd ??
     trade.price_usd ??
@@ -421,38 +387,6 @@ function renderIndividualTrade(
     token.price_usd ??
     token.usdPrice ??
     token.usd_price
-  );
-
-  const txns = num(
-    token.txns ??
-    token.transactions ??
-    token.totalTransactions ??
-    token.totalTrades ??
-    token.total_trades ??
-    token.tradeCount ??
-    token.trade_count
-  );
-
-  const volume = num(
-    trade.volumeUsd ??
-    trade.volume_usd ??
-    trade.usdVolume ??
-    trade.usd_volume ??
-    trade.tradeValueUsd ??
-    trade.trade_value_usd ??
-    token.volumeUsd ??
-    token.volume_usd ??
-    token.totalVolumeUsd ??
-    token.total_volume_usd
-  );
-
-  const traders = num(
-    token.traders ??
-    token.uniqueTraders ??
-    token.unique_traders ??
-    token.traderCount ??
-    token.trader_count ??
-    token.holdersTraded
   );
 
   const time = formatTradeTime(trade);
@@ -474,25 +408,9 @@ function renderIndividualTrade(
       </div>
 
       <div class="sikka-market-value">
-        ${money(mcap)}
-      </div>
-
-      <div class="sikka-market-value">
         ${Number.isFinite(tokenPrice)
           ? "$" + price(tokenPrice)
           : "—"}
-      </div>
-
-      <div class="sikka-market-value">
-        ${integer(txns)}
-      </div>
-
-      <div class="sikka-market-value">
-        ${money(volume)}
-      </div>
-
-      <div class="sikka-market-value">
-        ${integer(traders)}
       </div>
 
       <div class="sikka-market-time">
@@ -635,13 +553,9 @@ function formatTradeTime(trade) {
       grid-template-columns:
         minmax(180px,2.1fr)
         .95fr
-        1fr
         1.05fr
-        .75fr
-        1fr
-        .9fr
         1.15fr;
-      min-width: 980px;
+      min-width: 560px;
       align-items: center;
     }
 
@@ -796,116 +710,82 @@ setInterval(() => {
 }, 60 * 1000);
 
 // ==================================================
-// STM CHART - NO EXTERNAL CHART LIBRARY REQUIRED
+// STM/USD CHART
 // ==================================================
-
-let currentTimeframe = "24h";
 
 async function loadSTMChart(timeframe = "24h") {
   const container = document.getElementById("stm-chart");
-  if (!container) return;
-
-  currentTimeframe = timeframe;
-  container.innerHTML = '<div class="chart-loading">Loading STM market data...</div>';
+  if (!container || typeof LightweightCharts === "undefined") return;
 
   try {
-    const [cRes, sRes] = await Promise.allSettled([
-      fetch(`/api/sikka-candles?timeframe=${encodeURIComponent(timeframe)}&limit=200&_=${Date.now()}`, { cache: "no-store" }),
-      fetch(`/api/shm-price?_=${Date.now()}`, { cache: "no-store" })
+    container.innerHTML = '<div class="chart-loading">Loading STM/USD market data...</div>';
+
+    const [cRes, sRes] = await Promise.all([
+      fetch(`/api/sikka-candles?timeframe=${encodeURIComponent(timeframe)}&limit=200&_=${Date.now()}`, { cache:"no-store" }),
+      fetch(`/api/shm-price?_=${Date.now()}`, { cache:"no-store" })
     ]);
 
-    if (cRes.status !== "fulfilled" || !cRes.value.ok) {
-      throw new Error("Candle API unavailable");
-    }
+    if (!cRes.ok || !sRes.ok) throw new Error("Chart API unavailable");
 
-    const data = await cRes.value.json();
+    const data = await cRes.json();
+    const shm = await sRes.json();
+    const shmUsd = num(shm.priceUsd);
+
     if (!data.success || !Array.isArray(data.candles) || !data.candles.length) {
-      throw new Error(data.error || "No candle data available");
+      throw new Error("No candle data available");
     }
 
-    let shmUsd = NaN;
-    if (sRes.status === "fulfilled" && sRes.value.ok) {
-      try {
-        const shm = await sRes.value.json();
-        shmUsd = num(shm.priceUsd);
-      } catch (_) {}
+    if (!Number.isFinite(shmUsd) || shmUsd <= 0) {
+      throw new Error("SHM/USD price unavailable");
     }
 
-    const raw = data.candles.map(c => ({
-      time: Number(c.t),
-      shm: Number(c.c)
-    })).filter(x => Number.isFinite(x.time) && Number.isFinite(x.shm));
+    if (stmChart) stmChart.remove();
 
-    if (!raw.length) throw new Error("Invalid candle values");
+    container.innerHTML = "";
 
-    // If SHM/USD is available show USD. Otherwise show STM/SHM.
-    const useUsd = Number.isFinite(shmUsd) && shmUsd > 0;
-    const points = raw.map(x => ({
-      time: x.time,
-      value: useUsd ? x.shm * shmUsd : x.shm
-    }));
+    const points = data.candles.map(c => ({
+      time:Number(c.t),
+      value:Number(c.c) * shmUsd
+    })).filter(x => Number.isFinite(x.time) && Number.isFinite(x.value));
 
-    const values = points.map(p => p.value);
-    const min = Math.min(...values);
-    const max = Math.max(...values);
-    const range = max - min || Math.max(Math.abs(max) * 0.01, 0.000000001);
+    if (!points.length) throw new Error("Invalid candle values");
 
-    const width = 1200;
-    const height = 390;
-    const padL = 70;
-    const padR = 25;
-    const padT = 25;
-    const padB = 48;
-    const plotW = width - padL - padR;
-    const plotH = height - padT - padB;
+    stmChart = LightweightCharts.createChart(container, {
+      width:container.clientWidth,
+      height:430,
+      layout:{background:{color:"transparent"},textColor:"#aaa"},
+      grid:{
+        vertLines:{color:"rgba(255,255,255,.05)"},
+        horzLines:{color:"rgba(255,255,255,.05)"}
+      },
+      rightPriceScale:{borderColor:"rgba(255,255,255,.10)"},
+      timeScale:{borderColor:"rgba(255,255,255,.10)",timeVisible:true},
+      localization:{priceFormatter:v=>"$"+Number(v).toFixed(9)}
+    });
 
-    const x = i => padL + (points.length <= 1 ? 0 : i / (points.length - 1)) * plotW;
-    const y = v => padT + (1 - (v - min) / range) * plotH;
+    stmSeries = stmChart.addSeries(LightweightCharts.BaselineSeries, {
+      baseValue:{type:"price",price:points[0].value},
+      topLineColor:"#22c55e",
+      topFillColor1:"rgba(34,197,94,.30)",
+      topFillColor2:"rgba(34,197,94,.05)",
+      bottomLineColor:"#ef4444",
+      bottomFillColor1:"rgba(239,68,68,.05)",
+      bottomFillColor2:"rgba(239,68,68,.30)",
+      priceFormat:{type:"price",precision:9,minMove:0.000000001}
+    });
 
-    const line = points.map((p,i) => `${x(i).toFixed(2)},${y(p.value).toFixed(2)}`).join(" ");
-    const area = `${padL},${height-padB} ${line} ${x(points.length-1)},${height-padB}`;
-
-    const grid = [];
-    for (let i=0;i<=4;i++) {
-      const yy = padT + i * plotH / 4;
-      const val = max - i * range / 4;
-      grid.push(`
-        <line x1="${padL}" y1="${yy}" x2="${width-padR}" y2="${yy}" stroke="rgba(255,255,255,.07)"/>
-        <text x="${padL-10}" y="${yy+4}" text-anchor="end" fill="#8794a8" font-size="11">${useUsd ? "$" + val.toFixed(9) : val.toFixed(9) + " SHM"}</text>
-      `);
-    }
-
-    const start = new Date(points[0].time * 1000);
-    const end = new Date(points[points.length-1].time * 1000);
-    const fmt = d => new Intl.DateTimeFormat("en-IN", {
-      timeZone:"Asia/Kolkata", hour:"2-digit", minute:"2-digit", hour12:true
-    }).format(d);
-
-    container.innerHTML = `
-      <div style="height:100%;width:100%;position:relative;">
-        <div style="position:absolute;left:12px;top:8px;z-index:2;color:#8ea1bd;font-size:12px;font-weight:700;">
-          ${useUsd ? "STM / USD" : "STM / SHM"}
-        </div>
-        <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" style="width:100%;height:100%;display:block;">
-          <defs>
-            <linearGradient id="stmArea" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stop-color="#22c55e" stop-opacity=".28"/>
-              <stop offset="100%" stop-color="#22c55e" stop-opacity=".02"/>
-            </linearGradient>
-          </defs>
-          ${grid.join("")}
-          <polygon points="${area}" fill="url(#stmArea)"/>
-          <polyline points="${line}" fill="none" stroke="#22c55e" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
-          <text x="${padL}" y="${height-16}" fill="#8794a8" font-size="11">${fmt(start)} IST</text>
-          <text x="${width-padR}" y="${height-16}" text-anchor="end" fill="#8794a8" font-size="11">${fmt(end)} IST</text>
-        </svg>
-      </div>
-    `;
+    stmSeries.setData(points);
+    stmChart.timeScale().fitContent();
   } catch (e) {
-    console.error("Chart error:", e);
-    container.innerHTML = `<div class="chart-error">Unable to load STM market data.<br><small>${esc(e.message)}</small></div>`;
+    console.error("Chart error:",e);
+    container.innerHTML = `<div class="chart-error">Unable to load STM/USD market data.<br><small>${esc(e.message)}</small></div>`;
   }
 }
+
+window.addEventListener("resize", () => {
+  const c = document.getElementById("stm-chart");
+  if (stmChart && c) stmChart.resize(c.clientWidth,430);
+});
 
 document.querySelectorAll(".timeframe-button").forEach(button => {
   button.addEventListener("click", () => {
