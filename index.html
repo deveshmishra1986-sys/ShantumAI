@@ -324,8 +324,8 @@ function showTradesLoader(message="Loading latest Sikka trades...",sub="Fetching
   }
 }
 
-async function loadTrades(){
- showTradesLoader();
+async function loadTrades(showLoader=true){
+ if(showLoader) showTradesLoader();
  try{
   const [a,b]=await Promise.all([
    fetch("/api/sikka-live-trades?_="+Date.now(),{cache:"no-store"}),
@@ -459,14 +459,45 @@ async function loadChart(tf="24h"){
  }catch(e){$("chart").innerHTML='<div class="status error">Unable to load chart: '+esc(e.message)+'</div>'}
 }
 
-$("search").oninput=()=>{page=1;render()};
-$("tokenFilter").onchange=()=>{page=1;render()};
-$("actionFilter").onchange=()=>{page=1;render()};
-$("timeFilter").onchange=()=>{page=1;render()};
+$("search").oninput=async()=>{
+ page=1;
+ if(!trades.length) await loadTrades(true);
+ else render();
+};
+$("tokenFilter").onchange=async()=>{
+ page=1;
+ if(!trades.length) await loadTrades(true);
+ else render();
+};
+$("actionFilter").onchange=async()=>{
+ page=1;
+ if(!trades.length) await loadTrades(true);
+ else render();
+};
+$("timeFilter").onchange=async()=>{
+ page=1;
+ if(!trades.length) await loadTrades(true);
+ else render();
+};
 $("refresh").onclick=async()=>{
  $("refresh").disabled=true;$("refresh").textContent="↻ Refreshing...";
- updateDate();await Promise.all([loadTrades(false),loadShantum()]);
- $("refresh").disabled=false;$("refresh").textContent="↻ Refresh Data"
+ updateDate();
+
+ let slowLoaderTimer=setTimeout(()=>{
+   showTradesLoader("Loading latest Sikka trades...","Fetching live data from Sikka.fun");
+ },400);
+
+ try{
+   await Promise.all([
+     loadTrades(false),
+     loadShantum()
+   ]);
+ }finally{
+   clearTimeout(slowLoaderTimer);
+   $("status").style.display="none";
+   $("refresh").disabled=false;
+   $("refresh").textContent="↻ Refresh Data";
+ }
 };
 $("chartButton").onclick=()=>$("shantum").scrollIntoView({behavior:"smooth"});
 document.querySelectorAll(".tf").forEach(b=>b.onclick=()=>{
@@ -480,7 +511,11 @@ async function init(){
  await Promise.all([loadTrades(true),loadShantum(),loadChart("24h")])
 }
 init();
-setInterval(()=>{updateDate();loadTrades(false);loadShantum()},20000);
+setInterval(()=>{
+ updateDate();
+ loadTrades(false);
+ loadShantum();
+},20000);
 </script>
 </body>
 </html>
