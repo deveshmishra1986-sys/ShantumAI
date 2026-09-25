@@ -260,13 +260,14 @@ window.copyContract = copyContract;
 // SIKKA LIVE TRADES
 // ==================================================
 
-async function loadSikkaTrades() {
+async function loadSikkaTrades(showLoader = false) {
   if (!tradesCard) return;
 
-  // IMPORTANT:
-  // Show the loader BEFORE starting the API request.
-  // This means the loader is visible while Sikka is loading.
-  showSikkaLoader();
+  // Show loader only when there is no existing Sikka data.
+  // Automatic/background refreshes keep the current table visible.
+  if (showLoader) {
+    showSikkaLoader();
+  }
 
   try {
     const response = await fetch(
@@ -442,7 +443,7 @@ function renderIndividualTrade(trade, tokenMap) {
   const image = logo
     ? `<img src="${attr(logo)}"
             class="trade-token-logo"
-            onerror="this.style.display='none'>`
+            onerror="this.style.display='none'">`
     : "";
 
   const actionType = String(
@@ -753,7 +754,7 @@ async function refreshDashboard() {
   try {
     await Promise.all([
       loadShantum(),
-      loadSikkaTrades()
+      loadSikkaTrades(false)
     ]);
   } finally {
     isRefreshing = false;
@@ -772,12 +773,12 @@ if (refreshButton) {
 }
 
 loadShantum();
-loadSikkaTrades();
+loadSikkaTrades(true);
 
 setInterval(() => {
   if (!isRefreshing) {
     loadShantum();
-    loadSikkaTrades();
+    loadSikkaTrades(false);
   }
 }, 20 * 1000);
 
