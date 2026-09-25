@@ -1,280 +1,241 @@
-const SIKKA_BASE_URL = "https://api.sikka.fun/api/v1";
-const SHANTUM_CONTRACT = "0x3Fe5fbBA8034762fDd8d3d3b3dD7E788B9a12F04";
-
+const SIKKA_BASE = "https://api.sikka.fun/api/v1";
 const MAX_TOKENS = 50;
-const MAX_TRADES_PER_TOKEN = 100;
-const MAX_LATEST_TRADES = 30;
-const CONCURRENCY = 3;
+const TRADES_PER_TOKEN = 100;
+const CONCURRENCY = 8;
 
-function n(...values) {
-  for (const v of values) {
-    const x = Number(v);
-    if (Number.isFinite(x)) return x;
-  }
-  return NaN;
+function first(...values) {
+  return values.find(v => v !== undefined && v !== null && v !== "");
 }
 
-function arr(...values) {
-  for (const v of values) if (Array.isArray(v)) return v;
+function asArray(value) {
+  if (Array.isArray(value)) return value;
+  if (value && Array.isArray(value.data)) return value.data;
+  if (value && Array.isArray(value.tokens)) return value.tokens;
+  if (value && Array.isArray(value.results)) return value.results;
+  if (value && Array.isArray(value.data?.tokens)) return value.data.tokens;
   return [];
 }
 
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
+async function getJson(url) {
+  const response = await fetch(url, {
+    headers: { Accept: "application/json" },
+    cache: "no-store"
+  });
 
-async function getJson(url, attempts = 3) {
-  let lastError = null;
+  const text = await response.text();
 
-  for (let attempt = 1; attempt <= attempts; attempt++) {
-    try {
-      const r = await fetch(url, {
-        cache: "no-store",
-        headers: { Accept: "application/json" }
-      });
-
-      if (!r.ok) {
-        throw new Error(`Sikka HTTP ${r.status}`);
-      }
-
-      return await r.json();
-    } catch (error) {
-      lastError = error;
-      if (attempt < attempts) await sleep(500 * attempt);
-    }
-  }
-
-  throw lastError || new Error("Sikka request failed");
-}
-
-function extractMovers(payload) {
-  return arr(
-    payload?.data?.movers,
-    payload?.movers,
-    payload?.data?.items,
-    payload?.items,
-    payload?.data
-  );
-}
-
-function extractTrades(payload) {
-  return arr(
-    payload?.data,
-    payload?.data?.data,
-    payload?.data?.trades,
-    payload?.trades,
-    payload?.items,
-    payload?.data?.items,
-    payload
-  );
-}
-
-function extractToken(payload) {
-  if (payload?.data?.token) return payload.data.token;
-  if (payload?.data && !Array.isArray(payload.data)) return payload.data;
-  if (payload?.token) return payload.token;
-  return payload || null;
-}
-
-function timestampOf(t) {
-  let x = n(t?.t, t?.timestamp, t?.time, t?.created_at, t?.createdAt, t?.date);
-  if (!Number.isFinite(x)) return 0;
-  if (x < 100000000000) x *= 1000;
-  return x;
-}
-
-function actionOf(t) {
-  const raw = String(t?.type ?? t?.side ?? t?.action ?? "").toLowerCase();
-  if (raw.includes("buy")) return "buy";
-  if (raw.includes("sell")) return "sell";
-  return raw;
-}
-
-async function getShmUsd() {
+  let json;
   try {
-    const j = await getJson("https://api.coinpaprika.com/v1/tickers/shm-shardeum", 2);
-    return n(j?.quotes?.USD?.price);
+    json = JSON.parse(text);
   } catch {
-    return NaN;
+    throw new Error(`Sikka returned non-JSON (${response.status})`);
   }
+
+  if (!response.ok) {
+    const message =
+      first(json?.message, json?.error, json?.detail) ||
+      `HTTP ${response.status}`;
+    throw new Error(message);
+  }
+
+  return json;
 }
 
-function normalizeToken(source, fallback, shmUsd) {
-  const s = source || fallback || {};
-  const priceShm = n(s.price, s.price_shm, s.priceShm);
-
-  let priceUsd = n(s.price_usd, s.priceUsd, s.usd_price, s.usdPrice);
-  if (!Number.isFinite(priceUsd) && Number.isFinite(priceShm) && Number.isFinite(shmUsd)) {
-    priceUsd = priceShm * shmUsd;
-  }
-
-  const supply = n(s.circulating_supply, s.circulatingSupply, s.current_supply, s.currentSupply, s.total_supply, s.totalSupply, s.supply);
-  let marketCapUsd = n(s.market_cap_usd, s.marketCapUsd, s.market_cap_usd_value, s.marketCapUSD);
-
-  if (!Number.isFinite(marketCapUsd)) {
-    const currency = String(s.market_cap_currency || s.marketCapCurrency || "").toUpperCase();
-    if (currency === "USD" || currency === "$") marketCapUsd = n(s.market_cap, s.marketCap);
-  }
-
-  if (!Number.isFinite(marketCapUsd) && Number.isFinite(priceUsd) && Number.isFinite(supply)) {
-    marketCapUsd = priceUsd * supply;
-  }
+function normalizeToken(token) {
+  const address = first(
+    token?.address,
+    token?.token_ca,
+    token?.tokenCA,
+    token?.contract,
+    token?.contract_address,
+    token?.ca
+  );
 
   return {
-    token_ca: s.token_ca || s.contract || s.address || fallback?.token_ca || fallback?.contract || fallback?.address || "",
-    name: s.name || fallback?.name || "Unknown",
-    ticker: s.ticker || s.symbol || fallback?.ticker || fallback?.symbol || "",
-    image_url: s.image_url || s.image || s.logo || fallback?.image_url || fallback?.image || fallback?.logo || "",
-    marketCapUsd: Number.isFinite(marketCapUsd) ? marketCapUsd : null,
-    priceUsd: Number.isFinite(priceUsd) ? priceUsd : null,
-    txns: n(s.txns, s.transactions, s.total_transactions, s.totalTransactions, s.total_trades, s.totalTrades, s.trade_count, s.tradeCount),
-    volumeUsd: n(s.volume_usd, s.volumeUsd, s.total_volume_usd, s.totalVolumeUsd, s.volume_24h_usd, s.volume24hUsd),
-    traders: n(s.traders, s.unique_traders, s.uniqueTraders, s.trader_count, s.traderCount, s.holders_traded, s.holdersTraded)
+    address,
+    name: first(token?.name, token?.token_name, token?.metadata?.name, "Unknown"),
+    symbol: first(
+      token?.symbol,
+      token?.ticker,
+      token?.token_symbol,
+      token?.metadata?.symbol,
+      "TOKEN"
+    ),
+    image_url: first(
+      token?.image_url,
+      token?.image,
+      token?.logo,
+      token?.logo_url,
+      token?.metadata?.image,
+      token?.metadata?.image_url,
+      ""
+    )
   };
 }
 
-function normalizeTrade(t, token, shmUsd) {
-  const timestamp = timestampOf(t);
-  const type = actionOf(t);
-  const priceShm = n(t?.price, t?.price_shm, t?.priceShm);
-  let priceUsd = n(t?.price_usd, t?.priceUsd, t?.usd_price, t?.usdPrice);
-  if (!Number.isFinite(priceUsd) && Number.isFinite(priceShm) && Number.isFinite(shmUsd)) priceUsd = priceShm * shmUsd;
+function normalizeTrade(trade, token) {
+  const timestamp = Number(
+    first(trade?.t, trade?.timestamp, trade?.time, trade?.block_time, 0)
+  );
 
-  const volumeShm = n(t?.volume, t?.amount, t?.shm_amount, t?.shmAmount, t?.amount_shm, t?.amountShm, t?.value, t?.value_shm, t?.valueShm);
-  let volumeUsd = n(t?.volume_usd, t?.volumeUsd, t?.usd_volume, t?.usdVolume, t?.trade_value_usd, t?.tradeValueUsd, t?.value_usd, t?.valueUsd);
-  if (!Number.isFinite(volumeUsd) && Number.isFinite(volumeShm) && Number.isFinite(shmUsd)) volumeUsd = volumeShm * shmUsd;
+  const type = String(
+    first(trade?.type, trade?.side, trade?.action, "unknown")
+  ).toLowerCase();
 
   return {
-    token_ca: token.token_ca,
-    name: token.name,
-    ticker: token.ticker,
-    image_url: token.image_url,
+    tx: first(trade?.tx, trade?.hash, trade?.transaction_hash, ""),
     type,
-    price: Number.isFinite(priceShm) ? priceShm : null,
-    priceUsd: Number.isFinite(priceUsd) ? priceUsd : null,
-    volumeShm: Number.isFinite(volumeShm) ? volumeShm : null,
-    volumeUsd: Number.isFinite(volumeUsd) ? volumeUsd : null,
+    user: first(trade?.user, trade?.trader, trade?.wallet, ""),
+    price: String(first(trade?.price, trade?.token_price, "0")),
+    shm: String(first(trade?.shm, trade?.shm_amount, trade?.quote_amount, "0")),
+    amt: String(first(trade?.amt, trade?.amount, trade?.token_amount, "0")),
+    block: Number(first(trade?.block, trade?.block_number, 0)),
+    t: timestamp,
     timestamp,
-    tx: t?.tx || t?.tx_hash || t?.txHash || t?.hash || ""
+    token_ca: token.address,
+    name: token.name,
+    ticker: token.symbol,
+    symbol: token.symbol,
+    image_url: token.image_url
   };
 }
 
-async function getTokenTrades(address, mover, shmUsd) {
-  let tokenInfo = mover;
+async function fetchTokenTrades(token) {
+  if (!token.address) return [];
 
   try {
-    const payload = await getJson(`${SIKKA_BASE_URL}/tokens/${encodeURIComponent(address)}`, 2);
-    tokenInfo = extractToken(payload) || mover;
-  } catch (e) {
-    console.error("Token details failed:", address, e.message);
+    const url =
+      `${SIKKA_BASE}/tokens/${encodeURIComponent(token.address)}/trades` +
+      `?limit=${TRADES_PER_TOKEN}`;
+
+    const result = await getJson(url);
+
+    // Sikka's documented response is { data: [...], next_cursor, has_more }.
+    const trades = Array.isArray(result?.data)
+      ? result.data
+      : Array.isArray(result)
+        ? result
+        : [];
+
+    return trades.map(t => normalizeTrade(t, token));
+  } catch (error) {
+    // One broken token must not break the whole live-trades dashboard.
+    return [];
   }
-
-  let rawTrades = [];
-  try {
-    // Keep this endpoint WITHOUT a limit query parameter.
-    const payload = await getJson(`${SIKKA_BASE_URL}/tokens/${encodeURIComponent(address)}/trades`, 2);
-    rawTrades = extractTrades(payload);
-  } catch (e) {
-    console.error("Trades failed:", address, e.message);
-  }
-
-  const token = normalizeToken(tokenInfo, mover, shmUsd);
-  const trades = rawTrades
-    .map(t => normalizeTrade(t, token, shmUsd))
-    .filter(t => t.timestamp > 0 && (t.type === "buy" || t.type === "sell"))
-    .sort((a, b) => b.timestamp - a.timestamp)
-    .slice(0, MAX_TRADES_PER_TOKEN);
-
-  const apiTradeCount = n(tokenInfo.total_trades, tokenInfo.totalTrades, tokenInfo.trade_count, tokenInfo.tradeCount, tokenInfo.trades_count, tokenInfo.tradesCount);
-
-  return {
-    token: { ...token, totalTrades: Number.isFinite(apiTradeCount) ? apiTradeCount : trades.length },
-    trades
-  };
 }
 
-async function workers(items, fn, concurrency) {
-  const output = new Array(items.length);
-  let index = 0;
-  async function worker() {
+async function mapWithConcurrency(items, worker, concurrency) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+
+  async function runner() {
     while (true) {
-      const i = index++;
-      if (i >= items.length) return;
-      try { output[i] = await fn(items[i]); }
-      catch (e) { console.error("Sikka worker error:", e); output[i] = null; }
+      const index = nextIndex++;
+      if (index >= items.length) return;
+
+      try {
+        results[index] = await worker(items[index], index);
+      } catch {
+        results[index] = [];
+      }
     }
   }
-  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
-  return output;
+
+  const workers = Array.from(
+    { length: Math.min(concurrency, items.length) },
+    () => runner()
+  );
+
+  await Promise.all(workers);
+  return results;
 }
 
 export default async function handler(req, res) {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+
   try {
-    const shmUsd = await getShmUsd();
+    // Sikka token directory. We deliberately use the token directory,
+    // rather than /tokens/movers, so the trades belong to the actual
+    // token contract we query.
+    const tokenResult = await getJson(`${SIKKA_BASE}/tokens?limit=${MAX_TOKENS}`);
 
-    let movers = [];
-    let discoveryError = null;
+    const rawTokens = asArray(tokenResult);
 
-    try {
-      const moversPayload = await getJson(`${SIKKA_BASE_URL}/tokens/movers`, 4);
-      movers = extractMovers(moversPayload)
-        .filter(x => x?.token_ca || x?.address || x?.contract)
-        .slice(0, MAX_TOKENS);
-    } catch (e) {
-      discoveryError = e.message;
-      console.error("Sikka movers failed:", e.message);
+    const tokens = rawTokens
+      .map(normalizeToken)
+      .filter(t => t.address)
+      .slice(0, MAX_TOKENS);
+
+    if (!tokens.length) {
+      return res.status(200).json({
+        success: true,
+        trades: [],
+        totalTrades: 0,
+        tokensTracked: 0,
+        buyTrades: 0,
+        sellTrades: 0,
+        checkedAt: new Date().toISOString(),
+        warning: "Sikka /tokens returned no token records"
+      });
     }
 
-    // If the movers endpoint is temporarily returning 502, still try
-    // the Shantum token directly so the dashboard does not go blank.
-    if (!movers.length) {
-      movers = [{
-        token_ca: SHANTUM_CONTRACT,
-        name: "Shantum",
-        ticker: "STM"
-      }];
+    const tradeLists = await mapWithConcurrency(
+      tokens,
+      token => fetchTokenTrades(token),
+      CONCURRENCY
+    );
+
+    const allTrades = tradeLists.flat();
+
+    // Deduplicate transactions when the API exposes a tx hash.
+    const seen = new Set();
+    const deduped = [];
+
+    for (const trade of allTrades) {
+      const key = trade.tx
+        ? `${trade.tx}:${trade.token_ca}`
+        : `${trade.token_ca}:${trade.block}:${trade.t}:${trade.type}:${trade.price}:${trade.amt}`;
+
+      if (seen.has(key)) continue;
+      seen.add(key);
+      deduped.push(trade);
     }
 
-    const results = await workers(movers, async mover => {
-      const address = mover.token_ca || mover.address || mover.contract;
-      return getTokenTrades(address, mover, shmUsd);
-    }, CONCURRENCY);
+    // Newest block time first.
+    deduped.sort((a, b) => {
+      const bt = Number(b.t || b.timestamp || 0) - Number(a.t || a.timestamp || 0);
+      if (bt !== 0) return bt;
 
-    const validResults = results.filter(Boolean);
-    const tokens = validResults.map(x => x.token);
-    const trades = validResults
-      .flatMap(x => x.trades)
-      .sort((a, b) => b.timestamp - a.timestamp)
-      .slice(0, MAX_LATEST_TRADES);
+      return String(b.tx || "").localeCompare(String(a.tx || ""));
+    });
 
-    const totalTradeCount = tokens.reduce((sum, token) => {
-      const x = n(token.totalTrades);
-      return sum + (Number.isFinite(x) ? x : 0);
-    }, 0);
+    const trades = deduped.slice(0, 100);
+
+    const buyTrades = trades.filter(t => t.type === "buy").length;
+    const sellTrades = trades.filter(t => t.type === "sell").length;
 
     return res.status(200).json({
       success: true,
+      trades,
+      totalTrades: trades.length,
+      tokensTracked: tokens.length,
+      buyTrades,
+      sellTrades,
       checkedAt: new Date().toISOString(),
-      tokenCount: tokens.length,
-      totalTradeCount,
-      count: trades.length,
-      limit: MAX_LATEST_TRADES,
-      sort: "timestamp_desc",
-      discoveryError,
-      fallbackUsed: !discoveryError ? false : true,
-      tokens,
-      trades
+      source: "Sikka.fun API: /tokens + /tokens/{token_ca}/trades"
     });
   } catch (error) {
-    console.error("Sikka live trades error:", error);
-    return res.status(200).json({
+    return res.status(502).json({
       success: false,
-      error: error.message,
-      tokenCount: 0,
-      totalTradeCount: 0,
-      count: 0,
-      tokens: [],
-      trades: []
+      error: error?.message || "Unable to load Sikka trades",
+      trades: [],
+      totalTrades: 0,
+      tokensTracked: 0,
+      buyTrades: 0,
+      sellTrades: 0,
+      checkedAt: new Date().toISOString()
     });
   }
 }
