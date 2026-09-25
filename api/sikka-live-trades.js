@@ -1,7 +1,12 @@
 const SIKKA_BASE = "https://api.sikka.fun/api/v1";
-const MAX_TOKENS = 100;
-const TRADES_PER_TOKEN = 25;
-const CONCURRENCY = 20;
+
+// FAST MODE: fewer trades per token + high parallelism.
+// The token directory is normally ordered with recently active tokens first.
+const MAX_TOKENS = 60;
+const TRADES_PER_TOKEN = 10;
+const CONCURRENCY = 60;
+const REQUEST_TIMEOUT_MS = 5000;
+const MAX_RETURNED_TRADES = 100;
 
 function first(...values) {
   return values.find(v => v !== undefined && v !== null && v !== "");
@@ -16,29 +21,37 @@ function asArray(value) {
   return [];
 }
 
-async function getJson(url) {
-  const response = await fetch(url, {
-    headers: { Accept: "application/json" },
-    cache: "no-store"
-  });
+async function getJson(url, timeoutMs = REQUEST_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-  const text = await response.text();
-
-  let json;
   try {
-    json = JSON.parse(text);
-  } catch {
-    throw new Error(`Sikka returned non-JSON (${response.status})`);
-  }
+    const response = await fetch(url, {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+      signal: controller.signal
+    });
 
-  if (!response.ok) {
-    const message =
-      first(json?.message, json?.error, json?.detail) ||
-      `HTTP ${response.status}`;
-    throw new Error(message);
-  }
+    const text = await response.text();
+    let json;
 
-  return json;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      throw new Error(`Sikka returned non-JSON (${response.status})`);
+    }
+
+    if (!response.ok) {
+      const message =
+        first(json?.message, json?.error, json?.detail) ||
+        `HTTP ${response.status}`;
+      throw new Error(message);
+    }
+
+    return json;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function normalizeToken(token) {
@@ -78,13 +91,9 @@ function normalizeTrade(trade, token) {
     first(trade?.t, trade?.timestamp, trade?.time, trade?.block_time, 0)
   );
 
-  const type = String(
-    first(trade?.type, trade?.side, trade?.action, "unknown")
-  ).toLowerCase();
-
   return {
     tx: first(trade?.tx, trade?.hash, trade?.transaction_hash, ""),
-    type,
+    type: String(first(trade?.type, trade?.side, trade?.action, "unknown")).toLowerCase(),
     user: first(trade?.user, trade?.trader, trade?.wallet, ""),
     price: String(first(trade?.price, trade?.token_price, "0")),
     shm: String(first(trade?.shm, trade?.shm_amount, trade?.quote_amount, "0")),
@@ -104,13 +113,8 @@ async function fetchTokenTrades(token) {
   if (!token.address) return [];
 
   try {
-    const url =
-      `${SIKKA_BASE}/tokens/${encodeURIComponent(token.address)}/trades` +
-      `?limit=${TRADES_PER_TOKEN}`;
-
+    const url = `${SIKKA_BASE}/tokens/${encodeURIComponent(token.address)}/trades?limit=${TRADES_PER_TOKEN}`;
     const result = await getJson(url);
-
-    // Sikka's documented response is { data: [...], next_cursor, has_more }.
     const trades = Array.isArray(result?.data)
       ? result.data
       : Array.isArray(result)
@@ -118,8 +122,7 @@ async function fetchTokenTrades(token) {
         : [];
 
     return trades.map(t => normalizeTrade(t, token));
-  } catch (error) {
-    // One broken token must not break the whole live-trades dashboard.
+  } catch {
     return [];
   }
 }
@@ -132,38 +135,35 @@ async function mapWithConcurrency(items, worker, concurrency) {
     while (true) {
       const index = nextIndex++;
       if (index >= items.length) return;
-
-      try {
-        results[index] = await worker(items[index], index);
-      } catch {
-        results[index] = [];
-      }
+      results[index] = await worker(items[index], index);
     }
   }
 
-  const workers = Array.from(
-    { length: Math.min(concurrency, items.length) },
-    () => runner()
+  await Promise.all(
+    Array.from(
+      { length: Math.min(concurrency, items.length) },
+      () => runner()
+    )
   );
 
-  await Promise.all(workers);
   return results;
 }
 
 export default async function handler(req, res) {
-  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader(
+    "Cache-Control",
+    "no-store, no-cache, must-revalidate, proxy-revalidate"
+  );
   res.setHeader("Pragma", "no-cache");
   res.setHeader("Expires", "0");
 
+  const started = Date.now();
+
   try {
-    // Sikka token directory. We deliberately use the token directory,
-    // rather than /tokens/movers, so the trades belong to the actual
-    // token contract we query.
-    const tokenResult = await getJson(`${SIKKA_BASE}/tokens?limit=${MAX_TOKENS}`);
+    // One lightweight call to discover active tokens.
+    const tokenResult = await getJson(`${SIKKA_BASE}/tokens?limit=${MAX_TOKENS}`, 5000);
 
-    const rawTokens = asArray(tokenResult);
-
-    const tokens = rawTokens
+    const tokens = asArray(tokenResult)
       .map(normalizeToken)
       .filter(t => t.address)
       .slice(0, MAX_TOKENS);
@@ -177,65 +177,65 @@ export default async function handler(req, res) {
         buyTrades: 0,
         sellTrades: 0,
         checkedAt: new Date().toISOString(),
-        warning: "Sikka /tokens returned no token records"
+        elapsedMs: Date.now() - started
       });
     }
 
+    // Fetch token trade feeds in parallel instead of waiting through batches.
     const tradeLists = await mapWithConcurrency(
       tokens,
-      token => fetchTokenTrades(token),
+      fetchTokenTrades,
       CONCURRENCY
     );
 
-    const allTrades = tradeLists.flat();
-
-    // Deduplicate transactions when the API exposes a tx hash.
     const seen = new Set();
-    const deduped = [];
+    const allTrades = [];
 
-    for (const trade of allTrades) {
-      const key = trade.tx
-        ? `${trade.tx}:${trade.token_ca}`
-        : `${trade.token_ca}:${trade.block}:${trade.t}:${trade.type}:${trade.price}:${trade.amt}`;
+    for (const list of tradeLists) {
+      for (const trade of list) {
+        const key = trade.tx
+          ? `${trade.tx}:${trade.token_ca}`
+          : `${trade.token_ca}:${trade.block}:${trade.t}:${trade.type}:${trade.price}:${trade.amt}`;
 
-      if (seen.has(key)) continue;
-      seen.add(key);
-      deduped.push(trade);
+        if (!seen.has(key)) {
+          seen.add(key);
+          allTrades.push(trade);
+        }
+      }
     }
 
-    // Newest block time first.
-    deduped.sort((a, b) => {
-      const bt = Number(b.t || b.timestamp || 0) - Number(a.t || a.timestamp || 0);
-      if (bt !== 0) return bt;
-
+    allTrades.sort((a, b) => {
+      const timeDiff = Number(b.t || 0) - Number(a.t || 0);
+      if (timeDiff !== 0) return timeDiff;
       return String(b.tx || "").localeCompare(String(a.tx || ""));
     });
 
-    const trades = deduped.slice(0, 100);
-
-    const buyTrades = trades.filter(t => t.type === "buy").length;
-    const sellTrades = trades.filter(t => t.type === "sell").length;
+    const trades = allTrades.slice(0, MAX_RETURNED_TRADES);
 
     return res.status(200).json({
       success: true,
       trades,
       totalTrades: trades.length,
       tokensTracked: tokens.length,
-      buyTrades,
-      sellTrades,
+      buyTrades: trades.filter(t => t.type === "buy").length,
+      sellTrades: trades.filter(t => t.type === "sell").length,
       checkedAt: new Date().toISOString(),
-      source: "Sikka.fun API: /tokens + /tokens/{token_ca}/trades"
+      elapsedMs: Date.now() - started,
+      mode: "fast-parallel"
     });
   } catch (error) {
     return res.status(502).json({
       success: false,
-      error: error?.message || "Unable to load Sikka trades",
+      error: error?.name === "AbortError"
+        ? "Sikka API timed out. Please try again."
+        : error?.message || "Unable to load Sikka trades",
       trades: [],
       totalTrades: 0,
       tokensTracked: 0,
       buyTrades: 0,
       sellTrades: 0,
-      checkedAt: new Date().toISOString()
+      checkedAt: new Date().toISOString(),
+      elapsedMs: Date.now() - started
     });
   }
 }
