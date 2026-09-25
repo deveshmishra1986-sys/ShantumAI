@@ -284,11 +284,12 @@ async function loadSikkaTrades() {
           <div class="sikka-market-header">
             <div>TOKEN</div>
             <div>ACTION</div>
-            <div>MCAP</div>
-            <div>PRICE</div>
+           <div>PRICE</div>
             <div>TXNS</div>
-            <div>VOLUME</div>
-            <div>TRADERS</div>
+         
+    <!--   <div>VOLUME</div>
+     <div>MCAP</div>
+            <div>TRADERS</div>-->
             <div>TIME</div>
           </div>
 
