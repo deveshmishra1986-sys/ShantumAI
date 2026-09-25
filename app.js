@@ -265,9 +265,7 @@ async function loadSikkaTrades(showLoader = false) {
 
   // Show loader only when there is no existing Sikka data.
   // Automatic/background refreshes keep the current table visible.
-  if (showLoader) {
-    showSikkaLoader();
-  }
+ 
 
   try {
     const response = await fetch(
