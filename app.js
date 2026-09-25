@@ -604,83 +604,803 @@ window.copyContract =
 
 
 // --------------------------------------------------
-// LOAD SHARDEUM
+// LOAD SIKKA TRADES
 // --------------------------------------------------
 
-
-
 async function loadSikkaTrades() {
-  const card = document.getElementById("sikka-trades-card");
-  if (!card) return;
+
+  const card =
+    document.getElementById(
+      "sikka-trades-card"
+    );
+
+  if (!card) {
+    return;
+  }
+
 
   try {
-    const [tradesResponse, shmResponse] = await Promise.all([
-      fetch(`/api/sikka-live-trades?_=${Date.now()}`, { cache: "no-store" }),
-      fetch(`/api/shm-price?_=${Date.now()}`, { cache: "no-store" })
+
+    const [
+      tradesResponse,
+      shmResponse
+    ] = await Promise.all([
+
+      fetch(
+        `/api/sikka-live-trades?_=${Date.now()}`,
+        {
+          cache: "no-store"
+        }
+      ),
+
+      fetch(
+        `/api/shm-price?_=${Date.now()}`,
+        {
+          cache: "no-store"
+        }
+      )
+
     ]);
 
-    if (!tradesResponse.ok) throw new Error(`Trades API HTTP ${tradesResponse.status}`);
-    if (!shmResponse.ok) throw new Error(`SHM/USD API HTTP ${shmResponse.status}`);
 
-    const result = await tradesResponse.json();
-    const shmData = await shmResponse.json();
-    if (!result.success) throw new Error(result.error || "Unable to load trades");
+    if (!tradesResponse.ok) {
 
-    const shmUsd = Number(shmData.priceUsd);
-    if (!Number.isFinite(shmUsd) || shmUsd <= 0) throw new Error("SHM/USD price unavailable");
+      throw new Error(
+        `Trades API HTTP ${tradesResponse.status}`
+      );
 
-    const trades = Array.isArray(result.trades) ? result.trades : [];
-
-    if (!trades.length) {
-      card.innerHTML = `<div class="sikka-trades-card"><div class="sikka-title"><span>🔥</span><span>LIVE SIKKA TRADES</span><span class="live-dot"></span></div><p style="color:#8492aa;">No live trades found.</p></div>`;
-      return;
     }
 
-    card.innerHTML = `
-      <div class="sikka-trades-card">
-        <div class="sikka-title"><span>🔥</span><span>LIVE SIKKA TRADES</span><span class="live-dot"></span></div>
-        <div class="sikka-table">
-          <div class="sikka-header"><div>TOKEN</div><div>ACTION</div><div>PRICE (USD)</div><div>DATE / TIME</div></div>
-          ${trades.map(trade => renderTradeRowUSD(trade, shmUsd)).join("")}
+
+    if (!shmResponse.ok) {
+
+      throw new Error(
+        `SHM/USD API HTTP ${shmResponse.status}`
+      );
+
+    }
+
+
+    const result =
+      await tradesResponse.json();
+
+    const shmData =
+      await shmResponse.json();
+
+
+    if (!result.success) {
+
+      throw new Error(
+        result.error ||
+        "Unable to load trades"
+      );
+
+    }
+
+
+    const shmUsd =
+      Number(shmData.priceUsd);
+
+
+    if (
+      !Number.isFinite(shmUsd) ||
+      shmUsd <= 0
+    ) {
+
+      throw new Error(
+        "SHM/USD price unavailable"
+      );
+
+    }
+
+
+    const trades =
+      Array.isArray(result.trades)
+        ? result.trades
+        : [];
+
+
+    // ----------------------------------------------
+    // NO TRADES
+    // ----------------------------------------------
+
+    if (!trades.length) {
+
+      card.innerHTML = `
+
+        <div class="sikka-trades-card">
+
+          <div class="sikka-title">
+
+            <span>🔥</span>
+
+            <span>
+              LIVE SIKKA TRADES
+            </span>
+
+            <span class="live-dot"></span>
+
+          </div>
+
+          <p
+            style="
+              color:#8492aa;
+            "
+          >
+            No live trades found.
+          </p>
+
         </div>
-        <div class="sikka-updated">● Live data from Sikka</div>
-      </div>`;
-  } catch (error) {
-    console.error("Sikka trades error:", error);
-    card.innerHTML = `<div class="sikka-trades-card"><div class="sikka-title"><span>🔥</span><span>LIVE SIKKA TRADES</span></div><p style="color:#ff5264;">Unable to load live trades</p><p style="color:#66758c;font-size:11px;">${escapeHtml(error.message)}</p></div>`;
+
+      `;
+
+      return;
+
+    }
+
+
+    // ----------------------------------------------
+    // TOTAL TRADES
+    // ----------------------------------------------
+
+    const totalTrades =
+      Number.isFinite(
+        Number(
+          result.totalTradeCount
+        )
+      )
+        ? Number(
+            result.totalTradeCount
+          )
+        : trades.length;
+
+
+    // ----------------------------------------------
+    // MARKET CAP
+    // ----------------------------------------------
+
+    let marketCapText =
+      "—";
+
+
+    try {
+
+      const [
+        priceResponse,
+        infoResponse
+      ] = await Promise.all([
+
+        fetch(
+          `/api/shantum-price?_=${Date.now()}`,
+          {
+            cache: "no-store"
+          }
+        ),
+
+        fetch(
+          `/api/shantum?_=${Date.now()}`,
+          {
+            cache: "no-store"
+          }
+        )
+
+      ]);
+
+
+      if (
+        priceResponse.ok &&
+        infoResponse.ok
+      ) {
+
+        const priceData =
+          await priceResponse.json();
+
+        const infoData =
+          await infoResponse.json();
+
+
+        const stmShmPrice =
+          Number(
+            priceData.price
+          );
+
+        const currentSupply =
+          Number(
+            infoData.currentSupply
+          );
+
+
+        if (
+          Number.isFinite(
+            stmShmPrice
+          ) &&
+
+          Number.isFinite(
+            currentSupply
+          ) &&
+
+          stmShmPrice >= 0 &&
+
+          currentSupply >= 0
+        ) {
+
+          const marketCap =
+            stmShmPrice *
+            shmUsd *
+            currentSupply;
+
+
+          if (
+            Number.isFinite(
+              marketCap
+            )
+          ) {
+
+            marketCapText =
+              formatMarketCap(
+                marketCap
+              );
+
+          }
+
+        }
+
+      }
+
+    }
+
+    catch (error) {
+
+      console.warn(
+        "Market cap unavailable:",
+        error
+      );
+
+    }
+
+
+    // ----------------------------------------------
+    // SIKKA CARD
+    // ----------------------------------------------
+
+    card.innerHTML = `
+
+      <div class="sikka-trades-card">
+
+
+        <!-- TITLE -->
+
+        <div class="sikka-title">
+
+          <span>
+            🔥
+          </span>
+
+          <span>
+            LIVE SIKKA TRADES
+          </span>
+
+          <span
+            class="live-dot"
+          ></span>
+
+        </div>
+
+
+        <!-- STATS -->
+
+        <div class="sikka-stats">
+
+
+          <div class="sikka-stat">
+
+            <small>
+              TOTAL TRADES
+            </small>
+
+            <strong>
+              ${totalTrades.toLocaleString(
+                "en-US"
+              )}
+            </strong>
+
+          </div>
+
+
+          <div class="sikka-stat">
+
+            <small>
+              MARKET CAP
+            </small>
+
+            <strong>
+              ${marketCapText}
+            </strong>
+
+          </div>
+
+
+        </div>
+
+
+        <!-- TABLE -->
+
+        <div class="sikka-table">
+
+
+          <div class="sikka-header">
+
+            <div>
+              TOKEN
+            </div>
+
+            <div>
+              ACTION
+            </div>
+
+            <div>
+              PRICE (USD)
+            </div>
+
+            <div>
+              DATE / TIME
+            </div>
+
+          </div>
+
+
+          ${
+            trades
+              .map(
+                trade =>
+                  renderTradeRowUSD(
+                    trade,
+                    shmUsd
+                  )
+              )
+              .join("")
+          }
+
+
+        </div>
+
+
+        <!-- UPDATED -->
+
+        <div class="sikka-updated">
+
+          ● Live data from Sikka
+
+        </div>
+
+
+      </div>
+
+    `;
+
   }
+
+  catch (error) {
+
+    console.error(
+      "Sikka trades error:",
+      error
+    );
+
+
+    card.innerHTML = `
+
+      <div
+        class="sikka-trades-card"
+      >
+
+        <div class="sikka-title">
+
+          <span>
+            🔥
+          </span>
+
+          <span>
+            LIVE SIKKA TRADES
+          </span>
+
+        </div>
+
+
+        <p
+          style="
+            color:#ff5264;
+          "
+        >
+          Unable to load live trades
+        </p>
+
+
+        <p
+          style="
+            color:#66758c;
+            font-size:11px;
+          "
+        >
+          ${escapeHtml(
+            error.message
+          )}
+        </p>
+
+      </div>
+
+    `;
+
+  }
+
 }
 
-function renderTradeRowUSD(trade, shmUsd) {
-  const type = String(trade.type || "").toLowerCase();
-  const isBuy = type === "buy";
-  const actionClass = isBuy ? "buy" : "sell";
-  const actionText = isBuy ? "🟢 BUY" : "🔴 SELL";
-  const priceShm = Number(trade.price);
-  const priceUsd = Number.isFinite(priceShm) ? priceShm * shmUsd : NaN;
-  const price = Number.isFinite(priceUsd) ? `$${priceUsd.toFixed(12)}` : "—";
 
-  let timestamp = Number(trade.timestamp || trade.t || 0);
-  if (timestamp > 0 && timestamp < 100000000000) timestamp *= 1000;
-  const date = timestamp > 0 ? new Date(timestamp) : null;
-  let dateTime = "—";
-  if (date && !Number.isNaN(date.getTime())) {
-    dateTime = new Intl.DateTimeFormat("en-IN", { timeZone:"Asia/Kolkata", day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit", second:"2-digit", hour12:true }).format(date) + " IST";
+// --------------------------------------------------
+// RENDER TRADE ROW
+// --------------------------------------------------
+
+function renderTradeRowUSD(
+  trade,
+  shmUsd
+) {
+
+  const type =
+    String(
+      trade.type || ""
+    ).toLowerCase();
+
+
+  const isBuy =
+    type === "buy";
+
+
+  const actionClass =
+    isBuy
+      ? "buy"
+      : "sell";
+
+
+  const actionText =
+    isBuy
+      ? "🟢 BUY"
+      : "🔴 SELL";
+
+
+  // ----------------------------------------------
+  // PRICE
+  // ----------------------------------------------
+
+  const priceShm =
+    Number(
+      trade.price
+    );
+
+
+  const priceUsd =
+    Number.isFinite(
+      priceShm
+    )
+      ? priceShm * shmUsd
+      : NaN;
+
+
+  // USD ONLY
+  const price =
+    Number.isFinite(
+      priceUsd
+    )
+      ? `$${priceUsd.toFixed(12)}`
+      : "—";
+
+
+  // ----------------------------------------------
+  // DATE / TIME
+  // ----------------------------------------------
+
+  let timestamp =
+    Number(
+      trade.timestamp ||
+      trade.t ||
+      0
+    );
+
+
+  // Convert seconds to milliseconds
+  if (
+    timestamp > 0 &&
+    timestamp < 100000000000
+  ) {
+
+    timestamp *= 1000;
+
   }
 
-  const name = trade.name || trade.ticker || "Unknown";
-  const image = trade.image_url ? `<img src="${escapeAttribute(trade.image_url)}" class="trade-token-logo" onerror="this.style.display='none'">` : "";
-  return `<div class="sikka-row"><div class="token-name">${image}<span>${escapeHtml(name)}</span></div><div class="trade-action ${actionClass}">${actionText}</div><div class="trade-price">${price}</div><div class="trade-time" title="${escapeAttribute(dateTime)}">${escapeHtml(dateTime)}</div></div>`;
+
+  const date =
+    timestamp > 0
+      ? new Date(timestamp)
+      : null;
+
+
+  let dateTime =
+    "—";
+
+
+  if (
+    date &&
+    !Number.isNaN(
+      date.getTime()
+    )
+  ) {
+
+    dateTime =
+      new Intl.DateTimeFormat(
+        "en-IN",
+        {
+
+          timeZone:
+            "Asia/Kolkata",
+
+          day:
+            "2-digit",
+
+          month:
+            "short",
+
+          year:
+            "numeric",
+
+          hour:
+            "2-digit",
+
+          minute:
+            "2-digit",
+
+          second:
+            "2-digit",
+
+          hour12:
+            true
+
+        }
+      ).format(date)
+      + " IST";
+
+  }
+
+
+  // ----------------------------------------------
+  // TOKEN NAME
+  // ----------------------------------------------
+
+  const name =
+    trade.name ||
+    trade.ticker ||
+    "Unknown";
+
+
+  // ----------------------------------------------
+  // TOKEN IMAGE
+  // ----------------------------------------------
+
+  const image =
+    trade.image_url
+
+      ? `
+
+        <img
+          src="${escapeAttribute(
+            trade.image_url
+          )}"
+          class="trade-token-logo"
+          onerror="
+            this.style.display='none'
+          "
+        >
+
+      `
+
+      : "";
+
+
+  // ----------------------------------------------
+  // ROW
+  // ----------------------------------------------
+
+  return `
+
+    <div class="sikka-row">
+
+
+      <div class="token-name">
+
+        ${image}
+
+        <span>
+          ${escapeHtml(
+            name
+          )}
+        </span>
+
+      </div>
+
+
+      <div
+        class="trade-action ${actionClass}"
+      >
+
+        ${actionText}
+
+      </div>
+
+
+      <div class="trade-price">
+
+        ${price}
+
+      </div>
+
+
+      <div
+        class="trade-time"
+        title="${escapeAttribute(
+          dateTime
+        )}"
+      >
+
+        ${escapeHtml(
+          dateTime
+        )}
+
+      </div>
+
+
+    </div>
+
+  `;
+
 }
 
+
+// --------------------------------------------------
+// MARKET CAP FORMAT
+// --------------------------------------------------
+
+function formatMarketCap(
+  value
+) {
+
+  if (
+    !Number.isFinite(
+      value
+    ) ||
+    value < 0
+  ) {
+
+    return "—";
+
+  }
+
+
+  if (
+    value >= 1_000_000_000
+  ) {
+
+    return (
+      "$" +
+      (
+        value /
+        1_000_000_000
+      ).toFixed(2) +
+      "B"
+    );
+
+  }
+
+
+  if (
+    value >= 1_000_000
+  ) {
+
+    return (
+      "$" +
+      (
+        value /
+        1_000_000
+      ).toFixed(2) +
+      "M"
+    );
+
+  }
+
+
+  if (
+    value >= 1_000
+  ) {
+
+    return (
+      "$" +
+      (
+        value /
+        1_000
+      ).toFixed(2) +
+      "K"
+    );
+
+  }
+
+
+  return (
+    "$" +
+    value.toFixed(2)
+  );
+
+}
+
+
+// --------------------------------------------------
+// ESCAPE HTML
+// --------------------------------------------------
+
+function escapeHtml(
+  value
+) {
+
+  return String(
+    value ?? ""
+  )
+    .replace(
+      /&/g,
+      "&amp;"
+    )
+    .replace(
+      /</g,
+      "&lt;"
+    )
+    .replace(
+      />/g,
+      "&gt;"
+    )
+    .replace(
+      /"/g,
+      "&quot;"
+    )
+    .replace(
+      /'/g,
+      "&#039;"
+    );
+
+}
+
+
+// --------------------------------------------------
+// ESCAPE ATTRIBUTE
+// --------------------------------------------------
+
+function escapeAttribute(
+  value
+) {
+
+  return escapeHtml(
+    value
+  );
+
+}
+
+
+// ==================================================
 // SHANTUM SIKKA USD BASELINE CHART
 // ==================================================
 
-let stmChart = null;
+let stmChart =
+  null;
 
-let stmCandleSeries = null;
+let stmCandleSeries =
+  null;
 
-let currentTimeframe = "24h";
+let currentTimeframe =
+  "24h";
 
 
 // --------------------------------------------------
@@ -703,6 +1423,7 @@ async function loadSTMChart(
 
 
   try {
+
 
     // ----------------------------------------------
     // LOADING
@@ -745,7 +1466,9 @@ async function loadSTMChart(
     ]);
 
 
-    if (!candleResponse.ok) {
+    if (
+      !candleResponse.ok
+    ) {
 
       throw new Error(
         `Candle API HTTP ${candleResponse.status}`
@@ -754,7 +1477,9 @@ async function loadSTMChart(
     }
 
 
-    if (!shmResponse.ok) {
+    if (
+      !shmResponse.ok
+    ) {
 
       throw new Error(
         `SHM/USD API HTTP ${shmResponse.status}`
@@ -777,7 +1502,9 @@ async function loadSTMChart(
 
     if (
       !data.success ||
-      !Array.isArray(data.candles) ||
+      !Array.isArray(
+        data.candles
+      ) ||
       data.candles.length === 0
     ) {
 
@@ -793,11 +1520,15 @@ async function loadSTMChart(
     // ----------------------------------------------
 
     const shmUsd =
-      Number(shmData.priceUsd);
+      Number(
+        shmData.priceUsd
+      );
 
 
     if (
-      !Number.isFinite(shmUsd) ||
+      !Number.isFinite(
+        shmUsd
+      ) ||
       shmUsd <= 0
     ) {
 
@@ -829,14 +1560,18 @@ async function loadSTMChart(
 
       }
 
-      stmChart = null;
 
-      stmCandleSeries = null;
+      stmChart =
+        null;
+
+      stmCandleSeries =
+        null;
 
     }
 
 
-    chartContainer.innerHTML = "";
+    chartContainer.innerHTML =
+      "";
 
 
     // ----------------------------------------------
@@ -846,51 +1581,64 @@ async function loadSTMChart(
     const chartData =
       data.candles
 
-        .map(candle => {
+        .map(
+          candle => {
 
-          const closeSHM =
-            Number(candle.c);
-
-          const closeUSD =
-            closeSHM * shmUsd;
-
-
-          return {
-
-            time:
-              Number(candle.t),
-
-            value:
-              closeUSD
-
-          };
-
-        })
-
-        .filter(point => {
-
-          return (
-
-            Number.isFinite(
-              point.time
-            )
-
-            &&
-
-            Number.isFinite(
-              point.value
-            )
-
-            &&
-
-            point.value >= 0
-
-          );
-
-        });
+            const closeSHM =
+              Number(
+                candle.c
+              );
 
 
-    if (chartData.length === 0) {
+            const closeUSD =
+              closeSHM *
+              shmUsd;
+
+
+            return {
+
+              time:
+                Number(
+                  candle.t
+                ),
+
+              value:
+                closeUSD
+
+            };
+
+          }
+        )
+
+
+        .filter(
+          point => {
+
+            return (
+
+              Number.isFinite(
+                point.time
+              )
+
+              &&
+
+              Number.isFinite(
+                point.value
+              )
+
+              &&
+
+              point.value >= 0
+
+            );
+
+          }
+        );
+
+
+    if (
+      chartData.length === 0
+    ) {
 
       throw new Error(
         "Invalid STM/USD candle values"
@@ -985,8 +1733,9 @@ async function loadSTMChart(
 
                 return (
                   "$" +
-                  Number(price)
-                    .toFixed(9)
+                  Number(
+                    price
+                  ).toFixed(9)
                 );
 
               }
@@ -1169,54 +1918,58 @@ document
   .querySelectorAll(
     ".timeframe-button"
   )
-  .forEach(button => {
+  .forEach(
+    button => {
 
-    button.addEventListener(
+      button.addEventListener(
 
-      "click",
+        "click",
 
-      function () {
+        function () {
 
-        const timeframe =
-          this.dataset.timeframe;
-
-
-        if (!timeframe) {
-          return;
-        }
+          const timeframe =
+            this.dataset.timeframe;
 
 
-        currentTimeframe =
-          timeframe;
+          if (!timeframe) {
+            return;
+          }
 
 
-        document
-          .querySelectorAll(
-            ".timeframe-button"
-          )
-          .forEach(btn => {
+          currentTimeframe =
+            timeframe;
 
-            btn.classList.remove(
-              "active"
+
+          document
+            .querySelectorAll(
+              ".timeframe-button"
+            )
+            .forEach(
+              btn => {
+
+                btn.classList.remove(
+                  "active"
+                );
+
+              }
             );
 
-          });
+
+          this.classList.add(
+            "active"
+          );
 
 
-        this.classList.add(
-          "active"
-        );
+          loadSTMChart(
+            timeframe
+          );
 
+        }
 
-        loadSTMChart(
-          timeframe
-        );
+      );
 
-      }
-
-    );
-
-  });
+    }
+  );
 
 
 // --------------------------------------------------
@@ -1224,4 +1977,6 @@ document
 // DEFAULT = 24 HOURS
 // --------------------------------------------------
 
-loadSTMChart("24h");
+loadSTMChart(
+  "24h"
+);
