@@ -2,9 +2,9 @@ const SIKKA_BASE = "https://api.sikka.fun/api/v1";
 
 // FAST MODE: fewer trades per token + high parallelism.
 // The token directory is normally ordered with recently active tokens first.
-const MAX_TOKENS = 60;
-const TRADES_PER_TOKEN = 10;
-const CONCURRENCY = 60;
+const MAX_TOKENS = 100;
+const TRADES_PER_TOKEN = 20;
+const CONCURRENCY = 40;
 const REQUEST_TIMEOUT_MS = 5000;
 const MAX_RETURNED_TRADES = 100;
 
