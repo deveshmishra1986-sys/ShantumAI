@@ -465,7 +465,7 @@ $("actionFilter").onchange=()=>{page=1;render()};
 $("timeFilter").onchange=()=>{page=1;render()};
 $("refresh").onclick=async()=>{
  $("refresh").disabled=true;$("refresh").textContent="↻ Refreshing...";
- updateDate();await Promise.all([loadTrades(),loadShantum()]);
+ updateDate();await Promise.all([loadTrades(false),loadShantum()]);
  $("refresh").disabled=false;$("refresh").textContent="↻ Refresh Data"
 };
 $("chartButton").onclick=()=>$("shantum").scrollIntoView({behavior:"smooth"});
@@ -477,10 +477,10 @@ window.onresize=()=>{if(chart)chart.resize($("chart").clientWidth,330)}
 
 async function init(){
  updateDate();
- await Promise.all([loadTrades(),loadShantum(),loadChart("24h")])
+ await Promise.all([loadTrades(true),loadShantum(),loadChart("24h")])
 }
 init();
-setInterval(()=>{updateDate();loadTrades();loadShantum()},20000);
+setInterval(()=>{updateDate();loadTrades(false);loadShantum()},20000);
 </script>
 </body>
 </html>
