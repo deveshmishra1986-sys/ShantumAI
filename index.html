@@ -124,6 +124,13 @@ button,input,select{font:inherit}
 }
 .page-btn.active{background:#168ff1;border-color:#168ff1;color:#fff}
 .status{padding:16px;text-align:center;color:#91a9c4;font-size:12px}
+.loading-box{display:flex;align-items:center;justify-content:center;gap:10px;min-height:64px;color:#9eb6d0}
+.spinner{width:22px;height:22px;border:3px solid rgba(22,143,241,.22);border-top-color:#168ff1;border-right-color:#18e39a;border-radius:50%;animation:spin .75s linear infinite;flex:0 0 22px}
+.loading-text{font-size:12px}
+.loading-sub{display:block;color:#607d9c;font-size:10px;margin-top:3px}
+.skeleton{height:48px;border-top:1px solid rgba(255,255,255,.045);background:linear-gradient(90deg,rgba(255,255,255,.025) 25%,rgba(255,255,255,.06) 50%,rgba(255,255,255,.025) 75%);background-size:200% 100%;animation:shimmer 1.2s infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes shimmer{to{background-position:-200% 0}}
 .error{color:#ff6179!important}
 
 /* LOWER: SHANTUM + CHART */
@@ -245,14 +252,19 @@ button,input,select{font:inherit}
     <a class="control-btn" href="https://join.sikka.fun/0ty8uzq" target="_blank">↗ Open Sikka.fun</a>
   </div>
 
-  <div id="status" class="status">Loading latest Sikka trades...</div>
+  <div id="status" class="status">
+  <div class="loading-box">
+    <span class="spinner"></span>
+    <div><div class="loading-text">Loading latest Sikka trades...</div><span class="loading-sub">Fetching live data from Sikka.fun</span></div>
+  </div>
+</div>
 
   <div class="table-wrap">
     <div class="table">
       <div class="row head">
         <div>#</div><div>TOKEN</div><div>ACTION</div><div>PRICE (USD)</div><div>PRICE (SHM)</div><div>TIME</div>
       </div>
-      <div id="body"></div>
+      <div id="body"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
     </div>
   </div>
 
@@ -301,7 +313,19 @@ function updateDate(){
  $("date").textContent=new Intl.DateTimeFormat("en-IN",{timeZone:"Asia/Kolkata",day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:true}).format(new Date())+" IST"
 }
 
+function showTradesLoader(message="Loading latest Sikka trades...",sub="Fetching live data from Sikka.fun"){
+  const st=$("status");
+  st.className="status";
+  st.style.display="block";
+  st.innerHTML=`<div class="loading-box"><span class="spinner"></span><div><div class="loading-text">${esc(message)}</div><span class="loading-sub">${esc(sub)}</span></div></div>`;
+  const tableBody=$("body");
+  if(!trades.length && tableBody){
+    tableBody.innerHTML=Array.from({length:6},()=>`<tr><td colspan="8"><div class="skeleton"></div></td></tr>`).join("");
+  }
+}
+
 async function loadTrades(){
+ showTradesLoader();
  try{
   const [a,b]=await Promise.all([
    fetch("/api/sikka-live-trades?_="+Date.now(),{cache:"no-store"}),
