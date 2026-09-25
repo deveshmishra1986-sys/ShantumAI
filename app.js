@@ -1,1982 +1,861 @@
 // ==================================================
-// SHANTUM & SHARDEUM DASHBOARD
+// SHANTUM AI - app.js
+// SIKKA MARKET TABLE: TOKEN | MCAP | PRICE | TXNS | VOLUME | TRADERS
 // ==================================================
 
-
-// --------------------------------------------------
-// ELEMENTS
-// --------------------------------------------------
-
-const shantumCard =
-  document.getElementById("shantum-card");
-
-const shardeumCard =
-  document.getElementById("shardeum-card");
-
-const refreshButton =
-  document.getElementById("refresh-button");
-
-
-// --------------------------------------------------
-// REFRESH BUTTON
-// --------------------------------------------------
+const shantumCard = document.getElementById("shantum-card");
+const tradesCard = document.getElementById("sikka-trades-card");
+const refreshButton = document.getElementById("refresh-button");
 
 let isRefreshing = false;
+let stmChart = null;
+let stmSeries = null;
 
-async function refreshDashboard() {
-
-  if (isRefreshing) {
-    return;
-  }
-
-  isRefreshing = true;
-
-  if (refreshButton) {
-
-    refreshButton.disabled = true;
-
-    refreshButton.classList.add("refreshing");
-
-    refreshButton.innerHTML = `
-      <span class="refresh-icon">↻</span>
-      Refreshing...
-    `;
-  }
-
-  try {
-
-    await Promise.all([
-      loadShantum(),
-      loadSikkaTrades()
-    ]);
-
-  } finally {
-
-    isRefreshing = false;
-
-    if (refreshButton) {
-
-      refreshButton.disabled = false;
-
-      refreshButton.classList.remove(
-        "refreshing"
-      );
-
-      refreshButton.innerHTML = `
-        <span class="refresh-icon">↻</span>
-        Refresh Data
-      `;
-    }
-
-  }
-
+function esc(v) {
+  return String(v ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
-
-// --------------------------------------------------
-// REFRESH BUTTON CLICK
-// --------------------------------------------------
-
-if (refreshButton) {
-
-  refreshButton.addEventListener(
-    "click",
-    refreshDashboard
-  );
-
+function num(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : NaN;
 }
 
+function money(v) {
+  const n = num(v);
+  if (!Number.isFinite(n)) return "—";
+  if (n >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
+  if (n >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
+  if (n >= 1e3) return `$${(n / 1e3).toFixed(2)}K`;
+  return `$${n.toFixed(2)}`;
+}
 
-// --------------------------------------------------
-// LOAD SHANTUM
-// --------------------------------------------------
+function integer(v) {
+  const n = num(v);
+  return Number.isFinite(n) ? n.toLocaleString("en-US") : "—";
+}
+
+function price(v) {
+  const n = num(v);
+  if (!Number.isFinite(n)) return "—";
+  if (n >= 1) return n.toFixed(4);
+  if (n >= 0.01) return n.toFixed(6);
+  return n.toFixed(10);
+}
+
+function attr(v) {
+  return esc(v);
+}
+
+// ==================================================
+// SHANTUM
+// ==================================================
 
 async function loadShantum() {
+  if (!shantumCard) return;
 
   try {
-
-    const [
-      priceResponse,
-      infoResponse,
-      shmResponse
-    ] = await Promise.all([
-
-      fetch(
-        `/api/shantum-price?_=${Date.now()}`,
-        {
-          cache: "no-store"
-        }
-      ),
-
-      fetch(
-        `/api/shantum?_=${Date.now()}`,
-        {
-          cache: "no-store"
-        }
-      ),
-
-      fetch(
-        `/api/shm-price?_=${Date.now()}`,
-        {
-          cache: "no-store"
-        }
-      )
-
+    const [pRes, iRes, sRes] = await Promise.all([
+      fetch(`/api/shantum-price?_=${Date.now()}`, { cache: "no-store" }),
+      fetch(`/api/shantum?_=${Date.now()}`, { cache: "no-store" }),
+      fetch(`/api/shm-price?_=${Date.now()}`, { cache: "no-store" })
     ]);
 
-
-    if (!priceResponse.ok) {
-      throw new Error(
-        `Shantum price HTTP ${priceResponse.status}`
-      );
+    if (!pRes.ok || !iRes.ok || !sRes.ok) {
+      throw new Error("Unable to load Shantum data");
     }
 
+    const p = await pRes.json();
+    const info = await iRes.json();
+    const shm = await sRes.json();
 
-    if (!infoResponse.ok) {
-      throw new Error(
-        `Shantum info HTTP ${infoResponse.status}`
-      );
-    }
+    const stmShm = num(p.price);
+    const shmUsd = num(shm.priceUsd);
+    const stmUsd = stmShm * shmUsd;
+    const current = num(info.currentSupply);
+    const max = num(info.maxSupply);
+    const pct = max > 0 ? Math.min(100, Math.max(0, current / max * 100)) : 0;
 
-
-    if (!shmResponse.ok) {
-      throw new Error(
-        `SHM price HTTP ${shmResponse.status}`
-      );
-    }
-
-
-    const priceData =
-      await priceResponse.json();
-
-    const infoData =
-      await infoResponse.json();
-
-    const shmData =
-      await shmResponse.json();
-
-
-    // ----------------------------------------------
-    // STM / SHM PRICE
-    // ----------------------------------------------
-
-    const price =
-      Number(priceData.price);
-
-
-    // ----------------------------------------------
-    // SHM / USD PRICE
-    // ----------------------------------------------
-
-    const shmUsd =
-      Number(shmData.priceUsd);
-
-
-    if (
-      !Number.isFinite(price) ||
-      price < 0
-    ) {
-      throw new Error(
-        "Invalid Shantum price"
-      );
-    }
-
-
-    if (
-      !Number.isFinite(shmUsd) ||
-      shmUsd <= 0
-    ) {
-      throw new Error(
-        "SHM/USD price unavailable"
-      );
-    }
-
-
-    // ----------------------------------------------
-    // STM / USD PRICE
-    // ----------------------------------------------
-
-    const stmUsd =
-      price * shmUsd;
-
-
-    // ----------------------------------------------
-    // SUPPLY
-    // ----------------------------------------------
-
-    const currentSupply =
-      Number(infoData.currentSupply);
-
-    const maxSupply =
-      Number(infoData.maxSupply);
-
-
-    // ----------------------------------------------
-    // SUPPLY PERCENTAGE
-    // ----------------------------------------------
-
-    let supplyPercentage = 0;
-
-    if (
-      maxSupply > 0 &&
-      currentSupply >= 0
-    ) {
-      supplyPercentage =
-        (currentSupply / maxSupply) * 100;
-    }
-
-
-    supplyPercentage =
-      Math.min(
-        Math.max(
-          supplyPercentage,
-          0
-        ),
-        100
-      );
-
-
-    // ----------------------------------------------
-    // CONTRACT ADDRESS
-    // ----------------------------------------------
-
-    const contractAddress =
-      infoData.contractAddress ||
-      infoData.address ||
-      priceData.contractAddress ||
-      priceData.address ||
-      "";
-
-
-    // ----------------------------------------------
-    // CONTRACT SECTION
-    // ----------------------------------------------
-
-    let contractSection = "";
-
-    if (contractAddress) {
-
-      contractSection = `
-
-        <div class="contract-section">
-
-          <small>
-            Contract Address
-          </small>
-
-          <div class="contract-row">
-
-            <span
-              class="contract-address"
-              title="${contractAddress}"
-            >
-              ${contractAddress}
-            </span>
-
-            <button
-              class="copy-button"
-              type="button"
-              data-address="${contractAddress}"
-              onclick="copyContract(this)"
-            >
-              Copy
-            </button>
-
-          </div>
-
-          <div
-            class="copy-status"
-            id="copy-status"
-          ></div>
-
-        </div>
-
-      `;
-
-    }
-
-
-    // ----------------------------------------------
-    // SHANTUM CARD
-    // ----------------------------------------------
+    const contract =
+      info.contractAddress || info.address || p.contractAddress || p.address || "";
 
     shantumCard.innerHTML = `
-
       <div class="coin-header">
-
-        <img
-          class="coin-logo"
-          src="/shantumlogo.jpg"
-          alt="${priceData.symbol}"
-          onerror="this.style.display='none';"
-        >
-
+        <img class="coin-logo" src="/shantumlogo.jpg"
+             alt="STM"
+             onerror="this.onerror=null;this.src='/shantum-logo.png';">
         <div>
-
-          <h2>
-            ${priceData.name}
-          </h2>
-
-          <span>
-            ${priceData.symbol}
-          </span>
-
+          <h2>${esc(p.name || "Shantum")}</h2>
+          <span>${esc(p.symbol || "STM")}</span>
         </div>
-
       </div>
-
-
-      <!-- STM USD PRICE -->
 
       <div class="coin-price">
-
-        $${stmUsd.toFixed(9)}
-
+        $${Number.isFinite(stmUsd) ? stmUsd.toFixed(9) : "—"}
       </div>
 
-
-      <!-- STM / SHM PRICE -->
-
-      <div
-        style="
-          font-size: 14px;
-          opacity: 0.65;
-          margin-top: -12px;
-          margin-bottom: 20px;
-        "
-      >
-
-        ${price.toFixed(9)} SHM
-
+      <div style="font-size:14px;opacity:.65;margin-top:-12px;margin-bottom:20px;">
+        ${Number.isFinite(stmShm) ? stmShm.toFixed(9) : "—"} SHM
       </div>
-
 
       <div class="coin-info">
-
         <div>
-
-          <small>
-            Current Supply
-          </small>
-
-          <strong>
-
-            ${currentSupply.toLocaleString(
-              "en-US",
-              {
-                maximumFractionDigits: 6
-              }
-            )}
-
-            STM
-
-          </strong>
-
+          <small>Current Supply</small>
+          <strong>${integer(current)} STM</strong>
         </div>
-
-
         <div>
-
-          <small>
-            Max Supply
-          </small>
-
-          <strong>
-
-            ${maxSupply.toLocaleString(
-              "en-US"
-            )}
-
-            STM
-
-          </strong>
-
+          <small>Max Supply</small>
+          <strong>${integer(max)} STM</strong>
         </div>
-
       </div>
-
-
-      <!-- SUPPLY PROGRESS -->
 
       <div class="supply-section">
-
         <div class="supply-header">
-
-          <span>
-            Supply Progress
-          </span>
-
-          <strong>
-            ${supplyPercentage.toFixed(2)}%
-          </strong>
-
+          <span>Supply Progress</span>
+          <strong>${pct.toFixed(2)}%</strong>
         </div>
-
         <div class="supply-bar">
-
-          <div
-            class="supply-fill"
-            style="width: ${supplyPercentage}%"
-          ></div>
-
+          <div class="supply-fill" style="width:${pct}%"></div>
         </div>
-
       </div>
 
+      ${contract ? `
+        <div class="contract-section">
+          <small>Contract Address</small>
+          <div class="contract-row">
+            <span class="contract-address" title="${attr(contract)}">${esc(contract)}</span>
+            <button class="copy-button" type="button"
+              data-address="${attr(contract)}" onclick="copyContract(this)">Copy</button>
+          </div>
+          <div class="copy-status" id="copy-status"></div>
+        </div>` : ""}
 
-      ${contractSection}
-
-
-      <a
-        class="explorer-button interactive-button"
-        href="${priceData.explorer}"
-        target="_blank"
-        rel="noopener noreferrer"
-      >
-        View Explorer ↗
-      </a>
-
-
-      <!-- SOCIAL LINKS -->
+      <a class="explorer-button interactive-button"
+         href="${attr(p.explorer || "https://explorer.shardeum.org/")}"
+         target="_blank" rel="noopener noreferrer">View Explorer ↗</a>
 
       <div class="social-links">
-
-        <a
-          href="https://t.me/shantumcoin"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="social-button telegram-button interactive-button"
-        >
-
-          <span class="social-icon">
-            ✈
-          </span>
-
-          Telegram
-
-        </a>
-
-
-        <a
-          href="https://x.com/Shantumcoin"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="social-button x-button interactive-button"
-        >
-
-          <span class="social-icon">
-            𝕏
-          </span>
-
-          X
-
-        </a>
-
-
-        <a
-          href="https://join.sikka.fun/0ty8uzq"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="social-button trade-button interactive-button"
-        >
-
-          <span class="social-icon">
-            ↗
-          </span>
-
-          Trade
-
-        </a>
-
+        <a href="https://t.me/shantumcoin" target="_blank" rel="noopener noreferrer"
+           class="social-button telegram-button interactive-button">✈ Telegram</a>
+        <a href="https://x.com/Shantumcoin" target="_blank" rel="noopener noreferrer"
+           class="social-button x-button interactive-button">𝕏 X</a>
+        <a href="https://join.sikka.fun/0ty8uzq" target="_blank" rel="noopener noreferrer"
+           class="social-button trade-button interactive-button">↗ Trade</a>
       </div>
-
     `;
-
+  } catch (e) {
+    console.error("Shantum error:", e);
+    shantumCard.innerHTML = `<div class="error">Unable to load Shantum data.</div>`;
   }
-
-  catch (error) {
-
-    console.error(
-      "Shantum error:",
-      error
-    );
-
-
-    shantumCard.innerHTML = `
-
-      <div class="error">
-
-        Unable to load Shantum data.
-
-      </div>
-
-    `;
-
-  }
-
 }
-
-
-// --------------------------------------------------
-// COPY CONTRACT ADDRESS
-// --------------------------------------------------
 
 async function copyContract(button) {
-
-  const address =
-    button.getAttribute(
-      "data-address"
-    );
-
-  if (!address) {
-    return;
-  }
-
-
+  const address = button?.getAttribute("data-address");
+  if (!address) return;
   try {
-
-    await navigator.clipboard.writeText(
-      address
-    );
-
-
-    button.innerText =
-      "✓ Copied";
-
-
-    button.classList.add(
-      "copied"
-    );
-
-
-    const status =
-      document.getElementById(
-        "copy-status"
-      );
-
-
-    if (status) {
-
-      status.innerText =
-        "Contract address copied";
-
-    }
-
-
-    setTimeout(() => {
-
-      button.innerText =
-        "Copy";
-
-      button.classList.remove(
-        "copied"
-      );
-
-      if (status) {
-
-        status.innerText = "";
-
-      }
-
-    }, 2000);
-
-
+    await navigator.clipboard.writeText(address);
+    button.innerText = "✓ Copied";
+    setTimeout(() => button.innerText = "Copy", 2000);
+  } catch (e) {
+    console.error(e);
+    button.innerText = "Copy failed";
   }
-
-  catch (error) {
-
-    console.error(
-      "Copy failed:",
-      error
-    );
-
-    button.innerText =
-      "Copy failed";
-
-  }
-
 }
+window.copyContract = copyContract;
 
-
-// Make available to inline onclick
-window.copyContract =
-  copyContract;
-
-
-// --------------------------------------------------
-// LOAD SIKKA TRADES
-// --------------------------------------------------
+// ==================================================
+// SIKKA LIVE TRADES
+// ==================================================
 
 async function loadSikkaTrades() {
-
-  const card =
-    document.getElementById(
-      "sikka-trades-card"
-    );
-
-  if (!card) {
-    return;
-  }
-
+  if (!tradesCard) return;
 
   try {
+    const response = await fetch(
+      `/api/sikka-live-trades?_=${Date.now()}`,
+      { cache: "no-store" }
+    );
 
-    const [
-      tradesResponse,
-      shmResponse
-    ] = await Promise.all([
-
-      fetch(
-        `/api/sikka-live-trades?_=${Date.now()}`,
-        {
-          cache: "no-store"
-        }
-      ),
-
-      fetch(
-        `/api/shm-price?_=${Date.now()}`,
-        {
-          cache: "no-store"
-        }
-      )
-
-    ]);
-
-
-    if (!tradesResponse.ok) {
-
-      throw new Error(
-        `Trades API HTTP ${tradesResponse.status}`
-      );
-
+    if (!response.ok) {
+      throw new Error(`Sikka API HTTP ${response.status}`);
     }
 
+    const data = await response.json();
 
-    if (!shmResponse.ok) {
-
-      throw new Error(
-        `SHM/USD API HTTP ${shmResponse.status}`
-      );
-
+    if (!data.success) {
+      throw new Error(data.error || "Sikka API error");
     }
 
+    const tokens = Array.isArray(data.tokens)
+      ? data.tokens
+      : [];
 
-    const result =
-      await tradesResponse.json();
+    const trades = Array.isArray(data.trades)
+      ? data.trades
+      : [];
 
-    const shmData =
-      await shmResponse.json();
+    const totalTradeCount = num(data.totalTradeCount);
 
+    const today = new Intl.DateTimeFormat("en-IN", {
+      timeZone: "Asia/Kolkata",
+      day: "2-digit",
+      month: "short",
+      year: "numeric"
+    }).format(new Date());
 
-    if (!result.success) {
+    // Create a lookup so every individual BUY/SELL row
+    // gets the market data belonging to that token.
+    const tokenMap = {};
 
-      throw new Error(
-        result.error ||
-        "Unable to load trades"
-      );
+    tokens.forEach(token => {
+      const address = String(
+        token.token_ca ||
+        token.contract ||
+        token.address ||
+        ""
+      ).toLowerCase();
 
-    }
-
-
-    const shmUsd =
-      Number(shmData.priceUsd);
-
-
-    if (
-      !Number.isFinite(shmUsd) ||
-      shmUsd <= 0
-    ) {
-
-      throw new Error(
-        "SHM/USD price unavailable"
-      );
-
-    }
-
-
-    const trades =
-      Array.isArray(result.trades)
-        ? result.trades
-        : [];
-
-
-    // ----------------------------------------------
-    // NO TRADES
-    // ----------------------------------------------
-
-    if (!trades.length) {
-
-      card.innerHTML = `
-
-        <div class="sikka-trades-card">
-
-          <div class="sikka-title">
-
-            <span>🔥</span>
-
-            <span>
-              LIVE SIKKA TRADES
-            </span>
-
-            <span class="live-dot"></span>
-
-          </div>
-
-          <p
-            style="
-              color:#8492aa;
-            "
-          >
-            No live trades found.
-          </p>
-
-        </div>
-
-      `;
-
-      return;
-
-    }
-
-
-    // ----------------------------------------------
-    // TOTAL TRADES
-    // ----------------------------------------------
-
-    const totalTrades =
-      Number.isFinite(
-        Number(
-          result.totalTradeCount
-        )
-      )
-        ? Number(
-            result.totalTradeCount
-          )
-        : trades.length;
-
-
-    // ----------------------------------------------
-    // MARKET CAP
-    // ----------------------------------------------
-
-    let marketCapText =
-      "—";
-
-
-    try {
-
-      const [
-        priceResponse,
-        infoResponse
-      ] = await Promise.all([
-
-        fetch(
-          `/api/shantum-price?_=${Date.now()}`,
-          {
-            cache: "no-store"
-          }
-        ),
-
-        fetch(
-          `/api/shantum?_=${Date.now()}`,
-          {
-            cache: "no-store"
-          }
-        )
-
-      ]);
-
-
-      if (
-        priceResponse.ok &&
-        infoResponse.ok
-      ) {
-
-        const priceData =
-          await priceResponse.json();
-
-        const infoData =
-          await infoResponse.json();
-
-
-        const stmShmPrice =
-          Number(
-            priceData.price
-          );
-
-        const currentSupply =
-          Number(
-            infoData.currentSupply
-          );
-
-
-        if (
-          Number.isFinite(
-            stmShmPrice
-          ) &&
-
-          Number.isFinite(
-            currentSupply
-          ) &&
-
-          stmShmPrice >= 0 &&
-
-          currentSupply >= 0
-        ) {
-
-          const marketCap =
-            stmShmPrice *
-            shmUsd *
-            currentSupply;
-
-
-          if (
-            Number.isFinite(
-              marketCap
-            )
-          ) {
-
-            marketCapText =
-              formatMarketCap(
-                marketCap
-              );
-
-          }
-
-        }
-
+      if (address) {
+        tokenMap[address] = token;
       }
+    });
 
-    }
+    // Every individual trade remains visible.
+    // Newest trades appear first.
+    trades.sort(
+      (a, b) => getTradeTimestamp(b) - getTradeTimestamp(a)
+    );
 
-    catch (error) {
-
-      console.warn(
-        "Market cap unavailable:",
-        error
-      );
-
-    }
-
-
-    // ----------------------------------------------
-    // SIKKA CARD
-    // ----------------------------------------------
-
-    card.innerHTML = `
-
+    tradesCard.innerHTML = `
       <div class="sikka-trades-card">
 
-
-        <!-- TITLE -->
-
         <div class="sikka-title">
-
-          <span>
-            🔥
-          </span>
-
-          <span>
-            LIVE SIKKA TRADES
-          </span>
-
-          <span
-            class="live-dot"
-          ></span>
-
+          <span>🔥</span>
+          <span>LIVE SIKKA TRADES</span>
+          <span class="live-dot"></span>
         </div>
 
-
-        <!-- STATS -->
+        <div class="sikka-date">
+          ${today}
+        </div>
 
         <div class="sikka-stats">
 
-
           <div class="sikka-stat">
-
-            <small>
-              TOTAL TRADES
-            </small>
-
-            <strong>
-              ${totalTrades.toLocaleString(
-                "en-US"
-              )}
-            </strong>
-
+            <small>TOTAL TRADES</small>
+            <strong>${integer(totalTradeCount)}</strong>
           </div>
 
-
           <div class="sikka-stat">
-
-            <small>
-              MARKET CAP
-            </small>
-
-            <strong>
-              ${marketCapText}
-            </strong>
-
+            <small>TOKENS</small>
+            <strong>${integer(tokens.length)}</strong>
           </div>
-
 
         </div>
 
+        <div class="sikka-market-table">
 
-        <!-- TABLE -->
-
-        <div class="sikka-table">
-
-
-          <div class="sikka-header">
-
-            <div>
-              TOKEN
-            </div>
-
-            <div>
-              ACTION
-            </div>
-
-            <div>
-              PRICE (USD)
-            </div>
-
-            <div>
-              DATE / TIME
-            </div>
-
+          <div class="sikka-market-header">
+            <div>TOKEN</div>
+            <div>ACTION</div>
+            <div>MCAP</div>
+            <div>PRICE</div>
+            <div>TXNS</div>
+            <div>VOLUME</div>
+            <div>TRADERS</div>
+            <div>TIME</div>
           </div>
 
-
-          ${
-            trades
-              .map(
-                trade =>
-                  renderTradeRowUSD(
-                    trade,
-                    shmUsd
-                  )
-              )
-              .join("")
-          }
-
+          <div class="sikka-market-body">
+            ${
+              trades.length
+                ? trades
+                    .map(trade =>
+                      renderIndividualTrade(
+                        trade,
+                        tokenMap
+                      )
+                    )
+                    .join("")
+                : `
+                  <div class="sikka-empty">
+                    No live trades available.
+                  </div>
+                `
+            }
+          </div>
 
         </div>
-
-
-        <!-- UPDATED -->
 
         <div class="sikka-updated">
-
           ● Live data from Sikka
-
         </div>
 
-
       </div>
-
     `;
-
   }
-
   catch (error) {
+    console.error("Sikka error:", error);
 
-    console.error(
-      "Sikka trades error:",
-      error
-    );
-
-
-    card.innerHTML = `
-
-      <div
-        class="sikka-trades-card"
-      >
-
+    tradesCard.innerHTML = `
+      <div class="sikka-trades-card">
         <div class="sikka-title">
-
-          <span>
-            🔥
-          </span>
-
-          <span>
-            LIVE SIKKA TRADES
-          </span>
-
+          <span>🔥</span>
+          <span>LIVE SIKKA TRADES</span>
         </div>
 
-
-        <p
-          style="
-            color:#ff5264;
-          "
-        >
-          Unable to load live trades
+        <p style="color:#ff5264;">
+          Unable to load Sikka trades.
         </p>
 
-
-        <p
-          style="
-            color:#66758c;
-            font-size:11px;
-          "
-        >
-          ${escapeHtml(
-            error.message
-          )}
-        </p>
-
+        <small style="color:#66758c;">
+          ${esc(error.message)}
+        </small>
       </div>
-
     `;
-
   }
-
 }
 
 
-// --------------------------------------------------
-// RENDER TRADE ROW
-// --------------------------------------------------
+// ==================================================
+// INDIVIDUAL BUY / SELL ROW
+// ==================================================
 
-function renderTradeRowUSD(
+function renderIndividualTrade(
   trade,
-  shmUsd
+  tokenMap
 ) {
+  const tokenAddress = String(
+    trade.token_ca ||
+    trade.contract ||
+    trade.address ||
+    ""
+  ).toLowerCase();
 
-  const type =
-    String(
-      trade.type || ""
-    ).toLowerCase();
+  const token = tokenMap[tokenAddress] || {};
+
+  const name =
+    trade.name ||
+    token.name ||
+    trade.ticker ||
+    token.ticker ||
+    "Unknown";
+
+  const ticker =
+    trade.ticker ||
+    token.ticker ||
+    token.symbol ||
+    "";
+
+  const logo =
+    trade.image_url ||
+    token.image_url ||
+    token.image ||
+    token.logo ||
+    "";
+
+  const image = logo
+    ? `<img
+         src="${attr(logo)}"
+         class="trade-token-logo"
+         onerror="this.style.display='none'"
+       >`
+    : "";
+
+  const actionType = String(
+    trade.type ||
+    trade.side ||
+    ""
+  ).toLowerCase();
+
+  const isBuy = actionType === "buy";
+
+  const actionClass = isBuy
+    ? "buy"
+    : "sell";
+
+  const actionText = isBuy
+    ? "🟢 BUY"
+    : "🔴 SELL";
+
+  const mcap = num(
+    token.marketCapUsd ??
+    token.market_cap_usd ??
+    token.marketCapUSD ??
+    token.marketCap
+  );
+
+  const tokenPrice = num(
+    trade.priceUsd ??
+    trade.price_usd ??
+    trade.usdPrice ??
+    trade.usd_price ??
+    token.priceUsd ??
+    token.price_usd ??
+    token.usdPrice ??
+    token.usd_price
+  );
+
+  const txns = num(
+    token.txns ??
+    token.transactions ??
+    token.totalTransactions ??
+    token.totalTrades ??
+    token.total_trades ??
+    token.tradeCount ??
+    token.trade_count
+  );
+
+  const volume = num(
+    trade.volumeUsd ??
+    trade.volume_usd ??
+    trade.usdVolume ??
+    trade.usd_volume ??
+    trade.tradeValueUsd ??
+    trade.trade_value_usd ??
+    token.volumeUsd ??
+    token.volume_usd ??
+    token.totalVolumeUsd ??
+    token.total_volume_usd
+  );
+
+  const traders = num(
+    token.traders ??
+    token.uniqueTraders ??
+    token.unique_traders ??
+    token.traderCount ??
+    token.trader_count ??
+    token.holdersTraded
+  );
+
+  const time = formatTradeTime(trade);
+
+  return `
+    <div class="sikka-market-row">
+
+      <div class="sikka-market-token">
+        ${image}
+
+        <div class="sikka-market-token-text">
+          <strong>${esc(name)}</strong>
+          <span>${esc(ticker)}</span>
+        </div>
+      </div>
+
+      <div class="sikka-market-action ${actionClass}">
+        ${actionText}
+      </div>
+
+      <div class="sikka-market-value">
+        ${money(mcap)}
+      </div>
+
+      <div class="sikka-market-value">
+        ${Number.isFinite(tokenPrice)
+          ? "$" + price(tokenPrice)
+          : "—"}
+      </div>
+
+      <div class="sikka-market-value">
+        ${integer(txns)}
+      </div>
+
+      <div class="sikka-market-value">
+        ${money(volume)}
+      </div>
+
+      <div class="sikka-market-value">
+        ${integer(traders)}
+      </div>
+
+      <div class="sikka-market-time">
+        ${esc(time)}
+      </div>
+
+    </div>
+  `;
+}
 
 
-  const isBuy =
-    type === "buy";
+function getTradeTimestamp(trade) {
+  let timestamp = Number(
+    trade.timestamp ||
+    trade.t ||
+    trade.createdAt ||
+    trade.created_at ||
+    0
+  );
 
-
-  const actionClass =
-    isBuy
-      ? "buy"
-      : "sell";
-
-
-  const actionText =
-    isBuy
-      ? "🟢 BUY"
-      : "🔴 SELL";
-
-
-  // ----------------------------------------------
-  // PRICE
-  // ----------------------------------------------
-
-  const priceShm =
-    Number(
-      trade.price
-    );
-
-
-  const priceUsd =
-    Number.isFinite(
-      priceShm
-    )
-      ? priceShm * shmUsd
-      : NaN;
-
-
-  // USD ONLY
-  const price =
-    Number.isFinite(
-      priceUsd
-    )
-      ? `$${priceUsd.toFixed(12)}`
-      : "—";
-
-
-  // ----------------------------------------------
-  // DATE / TIME
-  // ----------------------------------------------
-
-  let timestamp =
-    Number(
-      trade.timestamp ||
-      trade.t ||
-      0
-    );
-
-
-  // Convert seconds to milliseconds
   if (
     timestamp > 0 &&
     timestamp < 100000000000
   ) {
-
     timestamp *= 1000;
-
   }
 
-
-  const date =
-    timestamp > 0
-      ? new Date(timestamp)
-      : null;
-
-
-  let dateTime =
-    "—";
-
-
-  if (
-    date &&
-    !Number.isNaN(
-      date.getTime()
-    )
-  ) {
-
-    dateTime =
-      new Intl.DateTimeFormat(
-        "en-IN",
-        {
-
-          timeZone:
-            "Asia/Kolkata",
-
-          day:
-            "2-digit",
-
-          month:
-            "short",
-
-          year:
-            "numeric",
-
-          hour:
-            "2-digit",
-
-          minute:
-            "2-digit",
-
-          second:
-            "2-digit",
-
-          hour12:
-            true
-
-        }
-      ).format(date)
-      + " IST";
-
-  }
-
-
-  // ----------------------------------------------
-  // TOKEN NAME
-  // ----------------------------------------------
-
-  const name =
-    trade.name ||
-    trade.ticker ||
-    "Unknown";
-
-
-  // ----------------------------------------------
-  // TOKEN IMAGE
-  // ----------------------------------------------
-
-  const image =
-    trade.image_url
-
-      ? `
-
-        <img
-          src="${escapeAttribute(
-            trade.image_url
-          )}"
-          class="trade-token-logo"
-          onerror="
-            this.style.display='none'
-          "
-        >
-
-      `
-
-      : "";
-
-
-  // ----------------------------------------------
-  // ROW
-  // ----------------------------------------------
-
-  return `
-
-    <div class="sikka-row">
-
-
-      <div class="token-name">
-
-        ${image}
-
-        <span>
-          ${escapeHtml(
-            name
-          )}
-        </span>
-
-      </div>
-
-
-      <div
-        class="trade-action ${actionClass}"
-      >
-
-        ${actionText}
-
-      </div>
-
-
-      <div class="trade-price">
-
-        ${price}
-
-      </div>
-
-
-      <div
-        class="trade-time"
-        title="${escapeAttribute(
-          dateTime
-        )}"
-      >
-
-        ${escapeHtml(
-          dateTime
-        )}
-
-      </div>
-
-
-    </div>
-
-  `;
-
+  return Number.isFinite(timestamp)
+    ? timestamp
+    : 0;
 }
 
 
-// --------------------------------------------------
-// MARKET CAP FORMAT
-// --------------------------------------------------
+function formatTradeTime(trade) {
+  const timestamp = getTradeTimestamp(trade);
 
-function formatMarketCap(
-  value
-) {
-
-  if (
-    !Number.isFinite(
-      value
-    ) ||
-    value < 0
-  ) {
-
+  if (!timestamp) {
     return "—";
-
   }
 
+  const date = new Date(timestamp);
 
-  if (
-    value >= 1_000_000_000
-  ) {
-
-    return (
-      "$" +
-      (
-        value /
-        1_000_000_000
-      ).toFixed(2) +
-      "B"
-    );
-
+  if (Number.isNaN(date.getTime())) {
+    return "—";
   }
-
-
-  if (
-    value >= 1_000_000
-  ) {
-
-    return (
-      "$" +
-      (
-        value /
-        1_000_000
-      ).toFixed(2) +
-      "M"
-    );
-
-  }
-
-
-  if (
-    value >= 1_000
-  ) {
-
-    return (
-      "$" +
-      (
-        value /
-        1_000
-      ).toFixed(2) +
-      "K"
-    );
-
-  }
-
 
   return (
-    "$" +
-    value.toFixed(2)
+    new Intl.DateTimeFormat("en-IN", {
+      timeZone: "Asia/Kolkata",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true
+    }).format(date) + " IST"
   );
-
 }
-
-
-// --------------------------------------------------
-// ESCAPE HTML
-// --------------------------------------------------
-
-function escapeHtml(
-  value
-) {
-
-  return String(
-    value ?? ""
-  )
-    .replace(
-      /&/g,
-      "&amp;"
-    )
-    .replace(
-      /</g,
-      "&lt;"
-    )
-    .replace(
-      />/g,
-      "&gt;"
-    )
-    .replace(
-      /"/g,
-      "&quot;"
-    )
-    .replace(
-      /'/g,
-      "&#039;"
-    );
-
-}
-
-
-// --------------------------------------------------
-// ESCAPE ATTRIBUTE
-// --------------------------------------------------
-
-function escapeAttribute(
-  value
-) {
-
-  return escapeHtml(
-    value
-  );
-
-}
-
 
 // ==================================================
-// SHANTUM SIKKA USD BASELINE CHART
+// SIKKA TRADES CSS
 // ==================================================
 
-let stmChart =
-  null;
+(function addMarketStyles() {
+  if (document.getElementById("sikka-market-styles")) return;
 
-let stmCandleSeries =
-  null;
+  const style = document.createElement("style");
+  style.id = "sikka-market-styles";
 
-let currentTimeframe =
-  "24h";
+  style.textContent = `
+    #shantum-card {
+      grid-column: 1;
+      grid-row: 1;
+    }
 
+    #sikka-trades-card {
+      grid-column: 2;
+      grid-row: 1;
+      align-self: start;
+      min-width: 0;
+    }
 
-// --------------------------------------------------
-// LOAD STM CHART
-// --------------------------------------------------
+    .sikka-trades-card {
+      width: 100%;
+      box-sizing: border-box;
+      overflow: hidden;
+    }
 
-async function loadSTMChart(
-  timeframe = "24h"
-) {
+    .sikka-title {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-weight: 700;
+      letter-spacing: .5px;
+    }
 
-  const chartContainer =
-    document.getElementById(
-      "stm-chart"
-    );
+    .sikka-date {
+      margin: 6px 0 12px;
+      color: #8ea1bd;
+      font-size: 13px;
+      font-weight: 600;
+    }
 
+    .sikka-stats {
+      display: grid;
+      grid-template-columns: repeat(2,minmax(0,1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
 
-  if (!chartContainer) {
-    return;
+    .sikka-stat {
+      padding: 9px 12px;
+      border: 1px solid rgba(0,170,255,.20);
+      border-radius: 10px;
+      background: rgba(0,20,45,.35);
+    }
+
+    .sikka-stat small {
+      display: block;
+      color: #7f91aa;
+      font-size: 10px;
+      letter-spacing: .6px;
+      margin-bottom: 4px;
+    }
+
+    .sikka-stat strong {
+      color: #eaf5ff;
+      font-size: 16px;
+    }
+
+    .sikka-market-table {
+      width: 100%;
+      overflow-x: auto;
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 8px;
+      background: rgba(5,10,22,.45);
+    }
+
+    .sikka-market-header,
+    .sikka-market-row {
+      display: grid;
+      grid-template-columns:
+        minmax(180px,2.1fr)
+        .95fr
+        1fr
+        1.05fr
+        .75fr
+        1fr
+        .9fr
+        1.15fr;
+      min-width: 980px;
+      align-items: center;
+    }
+
+    .sikka-market-header {
+      padding: 10px 12px;
+      background: rgba(255,255,255,.08);
+      color: #dcecff;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .4px;
+      text-transform: uppercase;
+    }
+
+    .sikka-market-row {
+      padding: 10px 12px;
+      border-top: 1px solid rgba(255,255,255,.06);
+    }
+
+    .sikka-market-row:hover {
+      background: rgba(0,150,255,.06);
+    }
+
+    .sikka-market-token {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      min-width: 0;
+    }
+
+    .sikka-market-token-text {
+      min-width: 0;
+    }
+
+    .sikka-market-token-text strong {
+      display: block;
+      color: #eaf5ff;
+      font-size: 13px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .sikka-market-token-text span {
+      display: block;
+      color: #7487a3;
+      font-size: 10px;
+      margin-top: 2px;
+    }
+
+    .sikka-market-value,
+    .sikka-market-time {
+      color: #dcecff;
+      font-size: 12px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .sikka-market-time {
+      color: #8ea1bd;
+      font-size: 11px;
+    }
+
+    .sikka-market-action {
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .sikka-market-action.buy {
+      color: #37e58a;
+    }
+
+    .sikka-market-action.sell {
+      color: #ff6070;
+    }
+
+    .trade-token-logo {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      object-fit: cover;
+      flex: 0 0 28px;
+    }
+
+    .sikka-empty {
+      padding: 25px;
+      color: #8492aa;
+      text-align: center;
+    }
+
+    .sikka-updated {
+      margin-top: 10px;
+      color: #62e89b;
+      font-size: 10px;
+    }
+
+    @media (max-width:900px) {
+      #shantum-card,
+      #sikka-trades-card {
+        grid-column: 1;
+        grid-row: auto;
+      }
+    }
+  `;
+
+  document.head.appendChild(style);
+})();
+
+// ==================================================
+// REFRESH
+// ==================================================
+
+async function refreshDashboard() {
+  if (isRefreshing) return;
+  isRefreshing = true;
+
+  if (refreshButton) {
+    refreshButton.disabled = true;
+    refreshButton.classList.add("refreshing");
+    refreshButton.innerHTML = '<span class="refresh-icon">↻</span> Refreshing...';
   }
-
 
   try {
+    await Promise.all([
+      loadShantum(),
+      loadSikkaTrades()
+    ]);
+  } finally {
+    isRefreshing = false;
+    if (refreshButton) {
+      refreshButton.disabled = false;
+      refreshButton.classList.remove("refreshing");
+      refreshButton.innerHTML = '<span class="refresh-icon">↻</span> Refresh Data';
+    }
+  }
+}
 
+if (refreshButton) {
+  refreshButton.addEventListener("click", refreshDashboard);
+}
 
-    // ----------------------------------------------
-    // LOADING
-    // ----------------------------------------------
+loadShantum();
+loadSikkaTrades();
 
-    chartContainer.innerHTML = `
+// Refresh every 60 seconds.
+setInterval(() => {
+  if (!isRefreshing) {
+    loadShantum();
+    loadSikkaTrades();
+  }
+}, 60 * 1000);
 
-      <div class="chart-loading">
+// ==================================================
+// STM/USD CHART
+// ==================================================
 
-        Loading STM/USD market data...
+async function loadSTMChart(timeframe = "24h") {
+  const container = document.getElementById("stm-chart");
+  if (!container || typeof LightweightCharts === "undefined") return;
 
-      </div>
+  try {
+    container.innerHTML = '<div class="chart-loading">Loading STM/USD market data...</div>';
 
-    `;
-
-
-    // ----------------------------------------------
-    // GET CANDLES + SHM USD PRICE
-    // ----------------------------------------------
-
-    const [
-      candleResponse,
-      shmResponse
-    ] = await Promise.all([
-
-      fetch(
-        `/api/sikka-candles?timeframe=${timeframe}&limit=200&_=${Date.now()}`,
-        {
-          cache: "no-store"
-        }
-      ),
-
-      fetch(
-        `/api/shm-price?_=${Date.now()}`,
-        {
-          cache: "no-store"
-        }
-      )
-
+    const [cRes, sRes] = await Promise.all([
+      fetch(`/api/sikka-candles?timeframe=${encodeURIComponent(timeframe)}&limit=200&_=${Date.now()}`, { cache:"no-store" }),
+      fetch(`/api/shm-price?_=${Date.now()}`, { cache:"no-store" })
     ]);
 
+    if (!cRes.ok || !sRes.ok) throw new Error("Chart API unavailable");
 
-    if (
-      !candleResponse.ok
-    ) {
+    const data = await cRes.json();
+    const shm = await sRes.json();
+    const shmUsd = num(shm.priceUsd);
 
-      throw new Error(
-        `Candle API HTTP ${candleResponse.status}`
-      );
-
+    if (!data.success || !Array.isArray(data.candles) || !data.candles.length) {
+      throw new Error("No candle data available");
     }
 
-
-    if (
-      !shmResponse.ok
-    ) {
-
-      throw new Error(
-        `SHM/USD API HTTP ${shmResponse.status}`
-      );
-
+    if (!Number.isFinite(shmUsd) || shmUsd <= 0) {
+      throw new Error("SHM/USD price unavailable");
     }
 
-
-    const data =
-      await candleResponse.json();
-
-
-    const shmData =
-      await shmResponse.json();
-
-
-    // ----------------------------------------------
-    // VALIDATE CANDLE DATA
-    // ----------------------------------------------
-
-    if (
-      !data.success ||
-      !Array.isArray(
-        data.candles
-      ) ||
-      data.candles.length === 0
-    ) {
-
-      throw new Error(
-        "No candle data available"
-      );
-
-    }
-
-
-    // ----------------------------------------------
-    // SHM/USD PRICE
-    // ----------------------------------------------
-
-    const shmUsd =
-      Number(
-        shmData.priceUsd
-      );
-
-
-    if (
-      !Number.isFinite(
-        shmUsd
-      ) ||
-      shmUsd <= 0
-    ) {
-
-      throw new Error(
-        "SHM/USD price unavailable"
-      );
-
-    }
-
-
-    // ----------------------------------------------
-    // REMOVE OLD CHART
-    // ----------------------------------------------
-
-    if (stmChart) {
-
-      try {
-
-        stmChart.remove();
-
-      }
-
-      catch (error) {
-
-        console.warn(
-          "Chart remove warning:",
-          error
-        );
-
-      }
-
-
-      stmChart =
-        null;
-
-      stmCandleSeries =
-        null;
-
-    }
-
-
-    chartContainer.innerHTML =
-      "";
-
-
-    // ----------------------------------------------
-    // CONVERT STM/SHM → STM/USD
-    // ----------------------------------------------
-
-    const chartData =
-      data.candles
-
-        .map(
-          candle => {
-
-            const closeSHM =
-              Number(
-                candle.c
-              );
-
-
-            const closeUSD =
-              closeSHM *
-              shmUsd;
-
-
-            return {
-
-              time:
-                Number(
-                  candle.t
-                ),
-
-              value:
-                closeUSD
-
-            };
-
-          }
-        )
-
-
-        .filter(
-          point => {
-
-            return (
-
-              Number.isFinite(
-                point.time
-              )
-
-              &&
-
-              Number.isFinite(
-                point.value
-              )
-
-              &&
-
-              point.value >= 0
-
-            );
-
-          }
-        );
-
-
-    if (
-      chartData.length === 0
-    ) {
-
-      throw new Error(
-        "Invalid STM/USD candle values"
-      );
-
-    }
-
-
-    // ----------------------------------------------
-    // BASELINE PRICE
-    // ----------------------------------------------
-
-    const baselinePrice =
-      chartData[0].value;
-
-
-    // ----------------------------------------------
-    // CREATE CHART
-    // ----------------------------------------------
-
-    stmChart =
-      LightweightCharts.createChart(
-
-        chartContainer,
-
-        {
-
-          width:
-            chartContainer.clientWidth,
-
-          height:
-            430,
-
-
-          layout: {
-
-            background: {
-
-              color:
-                "transparent"
-
-            },
-
-            textColor:
-              "#aaa"
-
-          },
-
-
-          grid: {
-
-            vertLines: {
-
-              color:
-                "rgba(255,255,255,0.05)"
-
-            },
-
-            horzLines: {
-
-              color:
-                "rgba(255,255,255,0.05)"
-
-            }
-
-          },
-
-
-          rightPriceScale: {
-
-            borderColor:
-              "rgba(255,255,255,0.10)"
-
-          },
-
-
-          timeScale: {
-
-            borderColor:
-              "rgba(255,255,255,0.10)",
-
-            timeVisible:
-              true
-
-          },
-
-
-          localization: {
-
-            priceFormatter:
-              price => {
-
-                return (
-                  "$" +
-                  Number(
-                    price
-                  ).toFixed(9)
-                );
-
-              }
-
-          }
-
-        }
-
-      );
-
-
-    // ----------------------------------------------
-    // BASELINE SERIES
-    // ----------------------------------------------
-
-    stmCandleSeries =
-
-      stmChart.addSeries(
-
-        LightweightCharts.BaselineSeries,
-
-        {
-
-          baseValue: {
-
-            type:
-              "price",
-
-            price:
-              baselinePrice
-
-          },
-
-
-          topLineColor:
-            "#22c55e",
-
-          topFillColor1:
-            "rgba(34,197,94,0.30)",
-
-          topFillColor2:
-            "rgba(34,197,94,0.05)",
-
-
-          bottomLineColor:
-            "#ef4444",
-
-          bottomFillColor1:
-            "rgba(239,68,68,0.05)",
-
-          bottomFillColor2:
-            "rgba(239,68,68,0.30)",
-
-
-          priceFormat: {
-
-            type:
-              "price",
-
-            precision:
-              9,
-
-            minMove:
-              0.000000001
-
-          },
-
-
-          lastValueVisible:
-            true,
-
-          priceLineVisible:
-            true
-
-        }
-
-      );
-
-
-    // ----------------------------------------------
-    // SET CHART DATA
-    // ----------------------------------------------
-
-    stmCandleSeries.setData(
-      chartData
-    );
-
-
-    // ----------------------------------------------
-    // FIT CHART
-    // ----------------------------------------------
-
-    stmChart
-      .timeScale()
-      .fitContent();
-
-
-    // ----------------------------------------------
-    // RESPONSIVE
-    // ----------------------------------------------
-
-    window.removeEventListener(
-      "resize",
-      resizeSTMChart
-    );
-
-
-    window.addEventListener(
-      "resize",
-      resizeSTMChart
-    );
-
+    if (stmChart) stmChart.remove();
+
+    container.innerHTML = "";
+
+    const points = data.candles.map(c => ({
+      time:Number(c.t),
+      value:Number(c.c) * shmUsd
+    })).filter(x => Number.isFinite(x.time) && Number.isFinite(x.value));
+
+    if (!points.length) throw new Error("Invalid candle values");
+
+    stmChart = LightweightCharts.createChart(container, {
+      width:container.clientWidth,
+      height:430,
+      layout:{background:{color:"transparent"},textColor:"#aaa"},
+      grid:{
+        vertLines:{color:"rgba(255,255,255,.05)"},
+        horzLines:{color:"rgba(255,255,255,.05)"}
+      },
+      rightPriceScale:{borderColor:"rgba(255,255,255,.10)"},
+      timeScale:{borderColor:"rgba(255,255,255,.10)",timeVisible:true},
+      localization:{priceFormatter:v=>"$"+Number(v).toFixed(9)}
+    });
+
+    stmSeries = stmChart.addSeries(LightweightCharts.BaselineSeries, {
+      baseValue:{type:"price",price:points[0].value},
+      topLineColor:"#22c55e",
+      topFillColor1:"rgba(34,197,94,.30)",
+      topFillColor2:"rgba(34,197,94,.05)",
+      bottomLineColor:"#ef4444",
+      bottomFillColor1:"rgba(239,68,68,.05)",
+      bottomFillColor2:"rgba(239,68,68,.30)",
+      priceFormat:{type:"price",precision:9,minMove:0.000000001}
+    });
+
+    stmSeries.setData(points);
+    stmChart.timeScale().fitContent();
+  } catch (e) {
+    console.error("Chart error:",e);
+    container.innerHTML = `<div class="chart-error">Unable to load STM/USD market data.<br><small>${esc(e.message)}</small></div>`;
   }
-
-
-  catch (error) {
-
-    console.error(
-      "STM/USD chart error:",
-      error
-    );
-
-
-    chartContainer.innerHTML = `
-
-      <div class="chart-error">
-
-        Unable to load STM/USD market data.
-
-        <br>
-
-        <small>
-          ${error.message}
-        </small>
-
-      </div>
-
-    `;
-
-  }
-
 }
 
+window.addEventListener("resize", () => {
+  const c = document.getElementById("stm-chart");
+  if (stmChart && c) stmChart.resize(c.clientWidth,430);
+});
 
-// --------------------------------------------------
-// RESIZE CHART
-// --------------------------------------------------
+document.querySelectorAll(".timeframe-button").forEach(button => {
+  button.addEventListener("click", () => {
+    document.querySelectorAll(".timeframe-button").forEach(b => b.classList.remove("active"));
+    button.classList.add("active");
+    loadSTMChart(button.dataset.timeframe || "24h");
+  });
+});
 
-function resizeSTMChart() {
-
-  const container =
-    document.getElementById(
-      "stm-chart"
-    );
-
-
-  if (
-    stmChart &&
-    container
-  ) {
-
-    stmChart.resize(
-
-      container.clientWidth,
-
-      430
-
-    );
-
-  }
-
-}
-
-
-// --------------------------------------------------
-// TIMEFRAME BUTTONS
-// --------------------------------------------------
-
-document
-  .querySelectorAll(
-    ".timeframe-button"
-  )
-  .forEach(
-    button => {
-
-      button.addEventListener(
-
-        "click",
-
-        function () {
-
-          const timeframe =
-            this.dataset.timeframe;
-
-
-          if (!timeframe) {
-            return;
-          }
-
-
-          currentTimeframe =
-            timeframe;
-
-
-          document
-            .querySelectorAll(
-              ".timeframe-button"
-            )
-            .forEach(
-              btn => {
-
-                btn.classList.remove(
-                  "active"
-                );
-
-              }
-            );
-
-
-          this.classList.add(
-            "active"
-          );
-
-
-          loadSTMChart(
-            timeframe
-          );
-
-        }
-
-      );
-
-    }
-  );
-
-
-// --------------------------------------------------
-// INITIAL CHART
-// DEFAULT = 24 HOURS
-// --------------------------------------------------
-
-loadSTMChart(
-  "24h"
-);
+loadSTMChart("24h");
