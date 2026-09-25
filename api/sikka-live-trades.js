@@ -1,7 +1,7 @@
 const SIKKA_BASE = "https://api.sikka.fun/api/v1";
-const MAX_TOKENS = 50;
-const TRADES_PER_TOKEN = 100;
-const CONCURRENCY = 8;
+const MAX_TOKENS = 100;
+const TRADES_PER_TOKEN = 25;
+const CONCURRENCY = 20;
 
 function first(...values) {
   return values.find(v => v !== undefined && v !== null && v !== "");
