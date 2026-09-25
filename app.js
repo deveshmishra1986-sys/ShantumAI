@@ -1,6 +1,6 @@
 // ==================================================
 // SHANTUM AI - app.js
-// SIKKA MARKET TABLE: TOKEN | MCAP | PRICE | TXNS | VOLUME | TRADERS
+// SIKKA MARKET TABLE + LIVE LOADER
 // ==================================================
 
 const shantumCard = document.getElementById("shantum-card");
@@ -49,6 +49,93 @@ function price(v) {
 
 function attr(v) {
   return esc(v);
+}
+
+// ==================================================
+// LOADER
+// ==================================================
+
+(function addSikkaLoaderStyles() {
+  if (document.getElementById("sikka-loader-styles")) return;
+
+  const style = document.createElement("style");
+  style.id = "sikka-loader-styles";
+
+  style.textContent = `
+    .sikka-loader {
+      min-height: 240px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 30px 20px;
+      box-sizing: border-box;
+    }
+
+    .sikka-loader-spinner {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      border: 4px solid rgba(98,232,155,.16);
+      border-top-color: #62e89b;
+      border-right-color: #62e89b;
+      animation: sikkaLoaderSpin .75s linear infinite;
+      margin-bottom: 18px;
+      box-sizing: border-box;
+    }
+
+    .sikka-loader-text {
+      color: #fff;
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .sikka-loader-subtext {
+      color: #8492aa;
+      font-size: 11px;
+      margin-top: 7px;
+    }
+
+    .sikka-loader-dots {
+      display: inline-block;
+      width: 22px;
+      text-align: left;
+    }
+
+    @keyframes sikkaLoaderSpin {
+      to { transform: rotate(360deg); }
+    }
+  `;
+
+  document.head.appendChild(style);
+})();
+
+function showSikkaLoader() {
+  if (!tradesCard) return;
+
+  tradesCard.innerHTML = `
+    <div class="sikka-trades-card">
+      <div class="sikka-title">
+        <span>🔥</span>
+        <span>LIVE SIKKA TRADES</span>
+        <span class="live-dot"></span>
+      </div>
+
+      <div class="sikka-loader">
+        <div class="sikka-loader-spinner"></div>
+
+        <div class="sikka-loader-text">
+          Loading latest Sikka trades
+          <span class="sikka-loader-dots">...</span>
+        </div>
+
+        <div class="sikka-loader-subtext">
+          Fetching live data from Sikka.fun
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 // ==================================================
@@ -156,6 +243,7 @@ async function loadShantum() {
 async function copyContract(button) {
   const address = button?.getAttribute("data-address");
   if (!address) return;
+
   try {
     await navigator.clipboard.writeText(address);
     button.innerText = "✓ Copied";
@@ -165,6 +253,7 @@ async function copyContract(button) {
     button.innerText = "Copy failed";
   }
 }
+
 window.copyContract = copyContract;
 
 // ==================================================
@@ -174,60 +263,38 @@ window.copyContract = copyContract;
 async function loadSikkaTrades() {
   if (!tradesCard) return;
 
-  try {
-    const [tradeResponse, shmResponse] = await Promise.all([
-      fetch(`/api/sikka-live-trades?_=${Date.now()}`, {
-        cache: "no-store"
-      }),
-      fetch(`/api/shm-price?_=${Date.now()}`, {
-        cache: "no-store"
-      })
-    ]);
+  // IMPORTANT:
+  // Show the loader BEFORE starting the API request.
+  // This means the loader is visible while Sikka is loading.
+  showSikkaLoader();
 
-    if (!tradeResponse.ok) {
-      throw new Error(`Sikka API HTTP ${tradeResponse.status}`);
+  try {
+    const response = await fetch(
+      `/api/sikka-live-trades?_=${Date.now()}`,
+      {
+        cache: "no-store"
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Sikka API HTTP ${response.status}`);
     }
 
-    const data = await tradeResponse.json();
-    const shm = shmResponse.ok ? await shmResponse.json() : {};
-    const shmUsd = num(shm.priceUsd);
+    const data = await response.json();
 
     if (!data.success) {
       throw new Error(data.error || "Sikka API error");
     }
 
-    const trades = Array.isArray(data.trades)
-      ? [...data.trades]
+    const tokens = Array.isArray(data.tokens)
+      ? data.tokens
       : [];
 
-    // Newest trade first
-    trades.sort(
-      (a, b) => getTradeTimestamp(b) - getTradeTimestamp(a)
-    );
+    const trades = Array.isArray(data.trades)
+      ? data.trades
+      : [];
 
-    const totalTradeCount = Number.isFinite(num(data.totalTrades))
-      ? num(data.totalTrades)
-      : trades.length;
-
-    const tokensTracked = Number.isFinite(num(data.tokensTracked))
-      ? num(data.tokensTracked)
-      : new Set(
-          trades
-            .map(t => String(t.token_ca || "").toLowerCase())
-            .filter(Boolean)
-        ).size;
-
-    const buyTrades = Number.isFinite(num(data.buyTrades))
-      ? num(data.buyTrades)
-      : trades.filter(
-          t => String(t.type).toLowerCase() === "buy"
-        ).length;
-
-    const sellTrades = Number.isFinite(num(data.sellTrades))
-      ? num(data.sellTrades)
-      : trades.filter(
-          t => String(t.type).toLowerCase() === "sell"
-        ).length;
+    const totalTradeCount = num(data.totalTradeCount);
 
     const today = new Intl.DateTimeFormat("en-IN", {
       timeZone: "Asia/Kolkata",
@@ -235,6 +302,25 @@ async function loadSikkaTrades() {
       month: "short",
       year: "numeric"
     }).format(new Date());
+
+    const tokenMap = {};
+
+    tokens.forEach(token => {
+      const address = String(
+        token.token_ca ||
+        token.contract ||
+        token.address ||
+        ""
+      ).toLowerCase();
+
+      if (address) {
+        tokenMap[address] = token;
+      }
+    });
+
+    trades.sort(
+      (a, b) => getTradeTimestamp(b) - getTradeTimestamp(a)
+    );
 
     tradesCard.innerHTML = `
       <div class="sikka-trades-card">
@@ -246,7 +332,7 @@ async function loadSikkaTrades() {
         </div>
 
         <div class="sikka-date">
-          ${esc(today)}
+          ${today}
         </div>
 
         <div class="sikka-stats">
@@ -258,17 +344,7 @@ async function loadSikkaTrades() {
 
           <div class="sikka-stat">
             <small>TOKENS</small>
-            <strong>${integer(tokensTracked)}</strong>
-          </div>
-
-          <div class="sikka-stat">
-            <small>BUY TRADES</small>
-            <strong>${integer(buyTrades)}</strong>
-          </div>
-
-          <div class="sikka-stat">
-            <small>SELL TRADES</small>
-            <strong>${integer(sellTrades)}</strong>
+            <strong>${integer(tokens.length)}</strong>
           </div>
 
         </div>
@@ -283,12 +359,11 @@ async function loadSikkaTrades() {
           </div>
 
           <div class="sikka-market-body">
-
             ${
               trades.length
                 ? trades
                     .map(trade =>
-                      renderIndividualTrade(trade, shmUsd)
+                      renderIndividualTrade(trade, tokenMap)
                     )
                     .join("")
                 : `
@@ -297,30 +372,22 @@ async function loadSikkaTrades() {
                   </div>
                 `
             }
-
           </div>
 
         </div>
 
         <div class="sikka-updated">
-          ● Live data from Sikka.fun
-          ${
-            Number.isFinite(shmUsd)
-              ? ` · SHM $${shmUsd.toFixed(6)}`
-              : ""
-          }
+          ● Live data from Sikka
         </div>
 
       </div>
     `;
-
-  } catch (error) {
-
+  }
+  catch (error) {
     console.error("Sikka error:", error);
 
     tradesCard.innerHTML = `
       <div class="sikka-trades-card">
-
         <div class="sikka-title">
           <span>🔥</span>
           <span>LIVE SIKKA TRADES</span>
@@ -333,42 +400,49 @@ async function loadSikkaTrades() {
         <small style="color:#66758c;">
           ${esc(error.message)}
         </small>
-
       </div>
     `;
   }
 }
 
-
 // ==================================================
 // INDIVIDUAL BUY / SELL ROW
 // ==================================================
 
-function renderIndividualTrade(trade, shmUsd) {
+function renderIndividualTrade(trade, tokenMap) {
+  const tokenAddress = String(
+    trade.token_ca ||
+    trade.contract ||
+    trade.address ||
+    ""
+  ).toLowerCase();
+
+  const token = tokenMap[tokenAddress] || {};
 
   const name =
     trade.name ||
+    token.name ||
     trade.ticker ||
-    trade.symbol ||
+    token.ticker ||
     "Unknown";
 
   const ticker =
     trade.ticker ||
-    trade.symbol ||
+    token.ticker ||
+    token.symbol ||
     "";
 
   const logo =
     trade.image_url ||
+    token.image_url ||
+    token.image ||
+    token.logo ||
     "";
 
   const image = logo
-    ? `<img
-         src="${attr(logo)}"
-         class="trade-token-logo"
-         alt="${attr(ticker || name)}"
-         loading="lazy"
-         onerror="this.style.display='none'"
-       >`
+    ? `<img src="${attr(logo)}"
+            class="trade-token-logo"
+            onerror="this.style.display='none'>`
     : "";
 
   const actionType = String(
@@ -379,46 +453,32 @@ function renderIndividualTrade(trade, shmUsd) {
 
   const isBuy = actionType === "buy";
 
-  const actionClass = isBuy
-    ? "buy"
-    : "sell";
+  const actionClass = isBuy ? "buy" : "sell";
+  const actionText = isBuy ? "🟢 BUY" : "🔴 SELL";
 
-  const actionText = isBuy
-    ? "🟢 BUY"
-    : "🔴 SELL";
+  const tokenPrice = num(
+    trade.priceUsd ??
+    trade.price_usd ??
+    trade.usdPrice ??
+    trade.usd_price ??
+    token.priceUsd ??
+    token.price_usd ??
+    token.usdPrice ??
+    token.usd_price
+  );
 
-  // Sikka trade.price is the token price in SHM.
-  const shmPrice = num(trade.price);
-
-  // Convert SHM/token price to USD.
-  const usdPrice =
-    Number.isFinite(shmPrice) &&
-    Number.isFinite(shmUsd)
-      ? shmPrice * shmUsd
-      : NaN;
-
-  const time =
-    formatTradeTime(trade);
+  const time = formatTradeTime(trade);
 
   return `
     <div class="sikka-market-row">
 
       <div class="sikka-market-token">
-
         ${image}
 
         <div class="sikka-market-token-text">
-
-          <strong>
-            ${esc(name)}
-          </strong>
-
-          <span>
-            ${esc(ticker)}
-          </span>
-
+          <strong>${esc(name)}</strong>
+          <span>${esc(ticker)}</span>
         </div>
-
       </div>
 
       <div class="sikka-market-action ${actionClass}">
@@ -426,37 +486,9 @@ function renderIndividualTrade(trade, shmUsd) {
       </div>
 
       <div class="sikka-market-value">
-
-        ${
-          Number.isFinite(usdPrice)
-
-            ? `
-              <strong>
-                $${price(usdPrice)}
-              </strong>
-
-              <small>
-                ${
-                  Number.isFinite(shmPrice)
-                    ? price(shmPrice)
-                    : "—"
-                } SHM
-              </small>
-            `
-
-            : Number.isFinite(shmPrice)
-
-              ? `
-                <strong>—</strong>
-
-                <small>
-                  ${price(shmPrice)} SHM
-                </small>
-              `
-
-              : "—"
-        }
-
+        ${Number.isFinite(tokenPrice)
+          ? "$" + price(tokenPrice)
+          : "—"}
       </div>
 
       <div class="sikka-market-time">
@@ -466,7 +498,6 @@ function renderIndividualTrade(trade, shmUsd) {
     </div>
   `;
 }
-
 
 function getTradeTimestamp(trade) {
   let timestamp = Number(
@@ -479,31 +510,21 @@ function getTradeTimestamp(trade) {
     0
   );
 
-  if (
-    timestamp > 0 &&
-    timestamp < 100000000000
-  ) {
+  if (timestamp > 0 && timestamp < 100000000000) {
     timestamp *= 1000;
   }
 
-  return Number.isFinite(timestamp)
-    ? timestamp
-    : 0;
+  return Number.isFinite(timestamp) ? timestamp : 0;
 }
-
 
 function formatTradeTime(trade) {
   const timestamp = getTradeTimestamp(trade);
 
-  if (!timestamp) {
-    return "—";
-  }
+  if (!timestamp) return "—";
 
   const date = new Date(timestamp);
 
-  if (Number.isNaN(date.getTime())) {
-    return "—";
-  }
+  if (Number.isNaN(date.getTime())) return "—";
 
   return (
     new Intl.DateTimeFormat("en-IN", {
@@ -719,12 +740,14 @@ function formatTradeTime(trade) {
 
 async function refreshDashboard() {
   if (isRefreshing) return;
+
   isRefreshing = true;
 
   if (refreshButton) {
     refreshButton.disabled = true;
     refreshButton.classList.add("refreshing");
-    refreshButton.innerHTML = '<span class="refresh-icon">↻</span> Refreshing...';
+    refreshButton.innerHTML =
+      '<span class="refresh-icon">↻</span> Refreshing...';
   }
 
   try {
@@ -734,10 +757,12 @@ async function refreshDashboard() {
     ]);
   } finally {
     isRefreshing = false;
+
     if (refreshButton) {
       refreshButton.disabled = false;
       refreshButton.classList.remove("refreshing");
-      refreshButton.innerHTML = '<span class="refresh-icon">↻</span> Refresh Data';
+      refreshButton.innerHTML =
+        '<span class="refresh-icon">↻</span> Refresh Data';
     }
   }
 }
@@ -749,7 +774,6 @@ if (refreshButton) {
 loadShantum();
 loadSikkaTrades();
 
-// Refresh automatically every 20 seconds.
 setInterval(() => {
   if (!isRefreshing) {
     loadShantum();
@@ -763,23 +787,35 @@ setInterval(() => {
 
 async function loadSTMChart(timeframe = "24h") {
   const container = document.getElementById("stm-chart");
+
   if (!container || typeof LightweightCharts === "undefined") return;
 
   try {
-    container.innerHTML = '<div class="chart-loading">Loading STM/USD market data...</div>';
+    container.innerHTML =
+      '<div class="chart-loading">Loading STM/USD market data...</div>';
 
     const [cRes, sRes] = await Promise.all([
-      fetch(`/api/sikka-candles?timeframe=${encodeURIComponent(timeframe)}&limit=200&_=${Date.now()}`, { cache:"no-store" }),
-      fetch(`/api/shm-price?_=${Date.now()}`, { cache:"no-store" })
+      fetch(
+        `/api/sikka-candles?timeframe=${encodeURIComponent(timeframe)}&limit=200&_=${Date.now()}`,
+        { cache: "no-store" }
+      ),
+      fetch(
+        `/api/shm-price?_=${Date.now()}`,
+        { cache: "no-store" }
+      )
     ]);
 
-    if (!cRes.ok || !sRes.ok) throw new Error("Chart API unavailable");
+    if (!cRes.ok || !sRes.ok) {
+      throw new Error("Chart API unavailable");
+    }
 
     const data = await cRes.json();
     const shm = await sRes.json();
     const shmUsd = num(shm.priceUsd);
 
-    if (!data.success || !Array.isArray(data.candles) || !data.candles.length) {
+    if (!data.success ||
+        !Array.isArray(data.candles) ||
+        !data.candles.length) {
       throw new Error("No candle data available");
     }
 
@@ -792,54 +828,96 @@ async function loadSTMChart(timeframe = "24h") {
     container.innerHTML = "";
 
     const points = data.candles.map(c => ({
-      time:Number(c.t),
-      value:Number(c.c) * shmUsd
-    })).filter(x => Number.isFinite(x.time) && Number.isFinite(x.value));
+      time: Number(c.t),
+      value: Number(c.c) * shmUsd
+    })).filter(x =>
+      Number.isFinite(x.time) &&
+      Number.isFinite(x.value)
+    );
 
-    if (!points.length) throw new Error("Invalid candle values");
+    if (!points.length) {
+      throw new Error("Invalid candle values");
+    }
 
     stmChart = LightweightCharts.createChart(container, {
-      width:container.clientWidth,
-      height:430,
-      layout:{background:{color:"transparent"},textColor:"#aaa"},
-      grid:{
-        vertLines:{color:"rgba(255,255,255,.05)"},
-        horzLines:{color:"rgba(255,255,255,.05)"}
+      width: container.clientWidth,
+      height: 430,
+      layout: {
+        background: { color: "transparent" },
+        textColor: "#aaa"
       },
-      rightPriceScale:{borderColor:"rgba(255,255,255,.10)"},
-      timeScale:{borderColor:"rgba(255,255,255,.10)",timeVisible:true},
-      localization:{priceFormatter:v=>"$"+Number(v).toFixed(9)}
+      grid: {
+        vertLines: { color: "rgba(255,255,255,.05)" },
+        horzLines: { color: "rgba(255,255,255,.05)" }
+      },
+      rightPriceScale: {
+        borderColor: "rgba(255,255,255,.10)"
+      },
+      timeScale: {
+        borderColor: "rgba(255,255,255,.10)",
+        timeVisible: true
+      },
+      localization: {
+        priceFormatter: v =>
+          "$" + Number(v).toFixed(9)
+      }
     });
 
-    stmSeries = stmChart.addSeries(LightweightCharts.BaselineSeries, {
-      baseValue:{type:"price",price:points[0].value},
-      topLineColor:"#22c55e",
-      topFillColor1:"rgba(34,197,94,.30)",
-      topFillColor2:"rgba(34,197,94,.05)",
-      bottomLineColor:"#ef4444",
-      bottomFillColor1:"rgba(239,68,68,.05)",
-      bottomFillColor2:"rgba(239,68,68,.30)",
-      priceFormat:{type:"price",precision:9,minMove:0.000000001}
-    });
+    stmSeries = stmChart.addSeries(
+      LightweightCharts.BaselineSeries,
+      {
+        baseValue: {
+          type: "price",
+          price: points[0].value
+        },
+        topLineColor: "#22c55e",
+        topFillColor1: "rgba(34,197,94,.30)",
+        topFillColor2: "rgba(34,197,94,.05)",
+        bottomLineColor: "#ef4444",
+        bottomFillColor1: "rgba(239,68,68,.05)",
+        bottomFillColor2: "rgba(239,68,68,.30)",
+        priceFormat: {
+          type: "price",
+          precision: 9,
+          minMove: 0.000000001
+        }
+      }
+    );
 
     stmSeries.setData(points);
     stmChart.timeScale().fitContent();
+
   } catch (e) {
-    console.error("Chart error:",e);
-    container.innerHTML = `<div class="chart-error">Unable to load STM/USD market data.<br><small>${esc(e.message)}</small></div>`;
+    console.error("Chart error:", e);
+
+    container.innerHTML = `
+      <div class="chart-error">
+        Unable to load STM/USD market data.
+        <small>${esc(e.message)}</small>
+      </div>
+    `;
   }
 }
 
 window.addEventListener("resize", () => {
   const c = document.getElementById("stm-chart");
-  if (stmChart && c) stmChart.resize(c.clientWidth,430);
+
+  if (stmChart && c) {
+    stmChart.resize(c.clientWidth, 430);
+  }
 });
 
 document.querySelectorAll(".timeframe-button").forEach(button => {
   button.addEventListener("click", () => {
-    document.querySelectorAll(".timeframe-button").forEach(b => b.classList.remove("active"));
+    document
+      .querySelectorAll(".timeframe-button")
+      .forEach(b => b.classList.remove("active"));
+
     button.classList.add("active");
-    loadSTMChart(button.dataset.timeframe || "24h");
+
+    loadSTMChart(
+      button.dataset.timeframe || "24h"
+    );
   });
 });
 
