@@ -13,14 +13,40 @@ function firstNumber(...values) {
   return null;
 }
 
-function extractArray(payload) {
-  if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload?.data)) return payload.data;
-  if (Array.isArray(payload?.data?.data)) return payload.data.data;
-  if (Array.isArray(payload?.data?.trades)) return payload.data.trades;
-  if (Array.isArray(payload?.trades)) return payload.trades;
-  if (Array.isArray(payload?.items)) return payload.items;
-  if (Array.isArray(payload?.data?.items)) return payload.data.items;
+// Sikka's movers response is normally: { data: { movers: [...] } }
+// Keep several fallbacks so a small response-shape change does not make
+// the whole dashboard show 0 tokens.
+function extractMovers(payload) {
+  const candidates = [
+    payload?.data?.movers,
+    payload?.movers,
+    payload?.data,
+    payload?.items,
+    payload?.data?.items
+  ];
+
+  for (const value of candidates) {
+    if (Array.isArray(value)) return value;
+  }
+
+  return [];
+}
+
+function extractTrades(payload) {
+  const candidates = [
+    payload,
+    payload?.data,
+    payload?.data?.data,
+    payload?.data?.trades,
+    payload?.trades,
+    payload?.items,
+    payload?.data?.items
+  ];
+
+  for (const value of candidates) {
+    if (Array.isArray(value)) return value;
+  }
+
   return [];
 }
 
@@ -36,8 +62,9 @@ function getTimestamp(trade) {
 
   if (value === null) return 0;
 
-  // Sikka may return seconds. Convert to milliseconds.
-  if (value > 0 && value < 100000000000) value *= 1000;
+  if (value > 0 && value < 100000000000) {
+    value *= 1000;
+  }
 
   return value;
 }
@@ -111,10 +138,11 @@ async function mapWithConcurrency(items, worker, concurrency) {
     while (true) {
       const index = next++;
       if (index >= items.length) return;
+
       try {
         results[index] = await worker(items[index], index);
       } catch (error) {
-        console.error(error);
+        console.error("Sikka token trade fetch error:", error);
         results[index] = null;
       }
     }
@@ -132,27 +160,34 @@ async function mapWithConcurrency(items, worker, concurrency) {
 
 export default async function handler(req, res) {
   try {
+    // ------------------------------------------------------------
     // 1. Get active/moving tokens.
+    // ------------------------------------------------------------
     const moversPayload = await fetchJson(
       `${SIKKA_BASE_URL}/tokens/movers`
     );
 
-    const movers = extractArray(moversPayload)
+    const movers = extractMovers(moversPayload)
       .filter(token => token?.token_ca || token?.address)
       .slice(0, MAX_TOKENS);
 
-    // 2. Fetch trades for each token.
-    // IMPORTANT: do NOT add ?limit=1000 here. The older Sikka endpoint
-    // that was working on the site returned trades from the plain URL.
+    console.log(`Sikka movers found: ${movers.length}`);
+
+    // ------------------------------------------------------------
+    // 2. Fetch trades for every active token.
+    // ------------------------------------------------------------
     const perToken = await mapWithConcurrency(
       movers,
       async token => {
         const tokenAddress = token.token_ca || token.address;
+
+        // Do NOT add ?limit=1000 here. The plain endpoint is the
+        // endpoint that was previously returning the trades on your site.
         const tradePayload = await fetchJson(
           `${SIKKA_BASE_URL}/tokens/${encodeURIComponent(tokenAddress)}/trades`
         );
 
-        const rawTrades = extractArray(tradePayload);
+        const rawTrades = extractTrades(tradePayload);
 
         const trades = rawTrades
           .map(trade => normalizeTrade(trade, token))
@@ -168,12 +203,16 @@ export default async function handler(req, res) {
       CONCURRENCY
     );
 
-    // 3. Merge every token's trades and sort strictly by date/time.
+    // ------------------------------------------------------------
+    // 3. Merge all token trades and sort newest -> oldest.
+    // ------------------------------------------------------------
     const allTrades = perToken
       .flatMap(value => Array.isArray(value) ? value : [])
       .sort((a, b) => b.timestamp - a.timestamp);
 
-    // 4. EXACTLY the latest 30 trades globally.
+    // ------------------------------------------------------------
+    // 4. Exactly the latest 30 trades globally.
+    // ------------------------------------------------------------
     const latestTrades = allTrades.slice(0, MAX_LATEST_TRADES);
 
     return res.status(200).json({
@@ -192,6 +231,9 @@ export default async function handler(req, res) {
     return res.status(500).json({
       success: false,
       error: error.message,
+      count: 0,
+      totalTradeCount: 0,
+      tokenCount: 0,
       trades: []
     });
   }
