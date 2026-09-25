@@ -4,79 +4,1252 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Shantum AI</title>
-  <link rel="icon" type="image/x-icon" href="/favicon.ico">
-  <link rel="stylesheet" href="/style.css?v=5">
+  <link rel="icon" href="/favicon.ico">
+
   <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
-  <!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-TRHTVZD6FB"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
 
-  gtag('config', 'G-TRHTVZD6FB');
-</script>
+  <style>
+    * { box-sizing: border-box; }
+
+    :root {
+      --bg: #020b18;
+      --panel: #061528;
+      --panel2: #081a30;
+      --border: rgba(37, 146, 235, .34);
+      --text: #edf6ff;
+      --muted: #8fa8c5;
+      --blue: #1597ff;
+      --green: #19e59a;
+      --red: #ff4d6d;
+      --yellow: #ffb21c;
+    }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 50% -20%, rgba(0,130,255,.12), transparent 40%),
+        var(--bg);
+      color: var(--text);
+      font-family: Inter, Arial, sans-serif;
+    }
+
+    button, input, select { font: inherit; }
+
+    .page {
+      width: min(1400px, calc(100% - 28px));
+      margin: 0 auto;
+      padding: 14px 0 28px;
+    }
+
+    /* Compact header */
+    .topbar {
+      height: 56px;
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+      margin-bottom: 16px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 19px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .brand-logo { font-size: 24px; }
+
+    .nav {
+      display: flex;
+      gap: 20px;
+      flex: 1;
+    }
+
+    .nav a {
+      color: #a9bfd8;
+      text-decoration: none;
+      font-size: 13px;
+      padding: 19px 0 15px;
+    }
+
+    .nav a.active {
+      color: #18a8ff;
+      border-bottom: 2px solid #18a8ff;
+    }
+
+    .top-links {
+      display: flex;
+      gap: 8px;
+    }
+
+    .top-link {
+      color: #dcecff;
+      text-decoration: none;
+      border: 1px solid rgba(45,150,230,.35);
+      border-radius: 18px;
+      padding: 7px 12px;
+      font-size: 12px;
+      background: rgba(3,22,43,.8);
+    }
+
+    /* Main Sikka card */
+    .sikka-panel {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: linear-gradient(145deg, rgba(7,25,48,.97), rgba(2,15,30,.97));
+      padding: 20px;
+      box-shadow: 0 18px 55px rgba(0,0,0,.2);
+    }
+
+    .trade-heading {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .trade-heading h1 {
+      margin: 0;
+      font-size: 27px;
+      line-height: 1;
+    }
+
+    .live-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      border: 1px solid rgba(25,229,154,.4);
+      background: rgba(25,229,154,.08);
+      color: var(--green);
+      border-radius: 20px;
+      padding: 7px 12px;
+      font-weight: 800;
+      font-size: 12px;
+    }
+
+    .live-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 10px var(--green);
+    }
+
+    .trade-subtitle {
+      color: #a8c0dc;
+      font-size: 14px;
+      margin: 10px 0 0;
+    }
+
+    .trade-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+      align-items: flex-start;
+    }
+
+    .trade-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .date-box {
+      color: #d8e9fb;
+      font-size: 13px;
+      text-align: right;
+      line-height: 1.45;
+    }
+
+    .refresh {
+      border: 0;
+      background: #168df0;
+      color: white;
+      padding: 11px 16px;
+      border-radius: 12px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .refresh:disabled { opacity: .6; }
+
+    .auto-refresh {
+      text-align: right;
+      margin-top: 8px;
+      color: #9bb3ce;
+      font-size: 11px;
+    }
+
+    .auto-refresh span { color: var(--green); }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .stat {
+      min-height: 92px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 15px 17px;
+      background: rgba(4,20,39,.72);
+    }
+
+    .stat small {
+      display: block;
+      color: #8da7c5;
+      font-size: 10px;
+      letter-spacing: .5px;
+      margin-bottom: 8px;
+    }
+
+    .stat strong {
+      font-size: 25px;
+      display: block;
+    }
+
+    .stat.buy { border-color: rgba(255,178,28,.42); }
+    .stat.buy small { color: #ffb21c; }
+    .stat.sell { border-color: rgba(255,77,109,.42); }
+    .stat.sell small { color: #ff6078; }
+    .stat.tokens { border-color: rgba(25,229,154,.38); }
+    .stat.tokens small { color: #19e59a; }
+
+    .controls {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr auto auto;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .control, .control-select {
+      width: 100%;
+      min-height: 42px;
+      border: 1px solid rgba(46,143,220,.32);
+      border-radius: 10px;
+      background: #07192d;
+      color: #dcecff;
+      padding: 0 13px;
+      outline: none;
+    }
+
+    .control:focus, .control-select:focus {
+      border-color: #169eff;
+    }
+
+    .control-button {
+      border: 1px solid rgba(46,143,220,.4);
+      border-radius: 10px;
+      background: #07192d;
+      color: #dcecff;
+      padding: 0 15px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .trade-table-wrap {
+      margin-top: 12px;
+      overflow-x: auto;
+      border: 1px solid rgba(255,255,255,.07);
+      border-radius: 12px;
+    }
+
+    .trade-table {
+      min-width: 850px;
+    }
+
+    .table-row {
+      display: grid;
+      grid-template-columns: 42px 2fr .9fr 1fr 1.15fr 1fr;
+      align-items: center;
+      min-height: 49px;
+      padding: 0 12px;
+      border-top: 1px solid rgba(255,255,255,.045);
+    }
+
+    .table-head {
+      background: #182941;
+      border: 0;
+      min-height: 42px;
+      color: #dcecff;
+      font-size: 11px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .token-cell {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      min-width: 0;
+    }
+
+    .token-logo {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      object-fit: cover;
+      flex: 0 0 30px;
+      background: #132b48;
+    }
+
+    .token-main {
+      min-width: 0;
+    }
+
+    .token-main strong {
+      display: block;
+      font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .token-main span {
+      display: block;
+      color: #7890ac;
+      font-size: 10px;
+      margin-top: 2px;
+    }
+
+    .action-buy { color: var(--green); font-weight: 900; font-size: 11px; }
+    .action-sell { color: var(--red); font-weight: 900; font-size: 11px; }
+
+    .price-usd { color: #eef7ff; font-size: 12px; font-weight: 700; }
+    .price-shm { color: #a8c0dc; font-size: 11px; }
+
+    .time { color: #91a8c2; font-size: 11px; white-space: nowrap; }
+
+    .bottom-table {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 12px;
+      color: #9db5d1;
+      font-size: 12px;
+    }
+
+    .pages {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .page-btn {
+      min-width: 34px;
+      height: 34px;
+      border: 1px solid rgba(50,145,220,.3);
+      background: #07192d;
+      color: #cfe3f8;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .page-btn.active {
+      background: #168df0;
+      border-color: #168df0;
+      color: white;
+    }
+
+    /* Shantum + chart below */
+    .lower-grid {
+      display: grid;
+      grid-template-columns: .95fr 1.35fr;
+      gap: 14px;
+      margin-top: 14px;
+    }
+
+    .card {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: linear-gradient(145deg, rgba(7,25,48,.97), rgba(2,15,30,.97));
+      padding: 18px;
+      min-width: 0;
+    }
+
+    .shantum-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .shantum-identity {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .shantum-logo {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 1px solid rgba(255,255,255,.12);
+    }
+
+    .shantum-name {
+      font-size: 18px;
+      font-weight: 900;
+    }
+
+    .shantum-symbol {
+      color: #8ea7c4;
+      font-size: 11px;
+      margin-top: 3px;
+    }
+
+    .mini-links {
+      display: flex;
+      gap: 6px;
+    }
+
+    .mini-link {
+      text-decoration: none;
+      color: #d8eaff;
+      border: 1px solid rgba(50,145,220,.35);
+      padding: 7px 9px;
+      border-radius: 8px;
+      font-size: 10px;
+    }
+
+    .shantum-price {
+      font-size: 27px;
+      font-weight: 900;
+      margin-top: 18px;
+    }
+
+    .shantum-shm {
+      color: #8ea7c4;
+      font-size: 11px;
+      margin-top: 4px;
+    }
+
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(3,1fr);
+      gap: 8px;
+      margin-top: 18px;
+    }
+
+    .info-box {
+      border: 1px solid rgba(40,145,225,.3);
+      border-radius: 9px;
+      padding: 11px;
+      min-width: 0;
+    }
+
+    .info-box small {
+      color: #8ca7c4;
+      display: block;
+      font-size: 9px;
+      margin-bottom: 5px;
+    }
+
+    .info-box strong {
+      font-size: 12px;
+      word-break: break-word;
+    }
+
+    .supply {
+      margin-top: 15px;
+    }
+
+    .supply-head {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      margin-bottom: 6px;
+    }
+
+    .supply-bar {
+      height: 10px;
+      border-radius: 10px;
+      background: #102a46;
+      overflow: hidden;
+    }
+
+    .supply-fill {
+      height: 100%;
+      background: linear-gradient(90deg,#0de6a0,#13b9f8);
+      border-radius: inherit;
+    }
+
+    .chart-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .chart-title {
+      font-size: 17px;
+      font-weight: 900;
+    }
+
+    .timeframes {
+      display: flex;
+      gap: 5px;
+    }
+
+    .tf {
+      border: 1px solid rgba(45,145,225,.3);
+      background: #07192d;
+      color: #9bb3ce;
+      border-radius: 7px;
+      padding: 6px 8px;
+      font-size: 10px;
+      cursor: pointer;
+    }
+
+    .tf.active {
+      background: #168df0;
+      color: white;
+      border-color: #168df0;
+    }
+
+    #stm-chart {
+      width: 100%;
+      height: 330px;
+      margin-top: 10px;
+    }
+
+    .loading, .error {
+      padding: 30px;
+      text-align: center;
+      color: #9db5d1;
+    }
+
+    .footer {
+      text-align: center;
+      color: #58718e;
+      font-size: 10px;
+      margin-top: 18px;
+    }
+
+    @media (max-width: 1050px) {
+      .controls {
+        grid-template-columns: 1fr 1fr;
+      }
+      .lower-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .page { width: min(100% - 16px, 1400px); }
+      .topbar { gap: 12px; }
+      .brand { font-size: 16px; }
+      .brand-logo { font-size: 20px; }
+      .nav { display: none; }
+      .top-links { margin-left: auto; }
+      .top-link { padding: 6px 8px; font-size: 10px; }
+
+      .trade-top {
+        flex-direction: column;
+      }
+
+      .trade-right {
+        width: 100%;
+        justify-content: space-between;
+      }
+
+      .stats {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .controls {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .controls .control {
+        grid-column: 1 / -1;
+      }
+
+      .info-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .bottom-table {
+        flex-direction: column;
+        gap: 10px;
+        align-items: flex-start;
+      }
+
+      .sikka-panel, .card {
+        padding: 13px;
+      }
+
+      .trade-heading h1 {
+        font-size: 21px;
+      }
+    }
+  </style>
 </head>
+
 <body>
-  <main class="dashboard">
+<div class="page">
 
-    <header class="hero">
-      <div class="hero-badge">AI-POWERED SHARDEUM ECOSYSTEM</div>
-      <h1>Shantum AI</h1>
-      <p>AI Agent. Reward. Burn, Web3.</p>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-logo">🔥</span>
+      <span>SHANTUM AI</span>
+    </div>
 
-      <button id="refresh-button" class="refresh-button" type="button">
-        <span class="refresh-icon">↻</span>
-        Refresh Data
-      </button>
-    </header>
+    <nav class="nav">
+      <a class="active" href="#live-trades">Live Trades</a>
+      <a href="#shantum">Token Info</a>
+    </nav>
 
-    <section class="coins-grid">
+    <div class="top-links">
+      <a class="top-link" href="https://t.me/shantumcoin" target="_blank">✈ Telegram</a>
+      <a class="top-link" href="https://x.com/Shantumcoin" target="_blank">𝕏 X</a>
+      <a class="top-link" href="https://explorer.shardeum.org/" target="_blank">Explorer ↗</a>
+    </div>
+  </header>
 
-      <div id="shantum-card" class="coin-card shantum-card">
-        <div class="loading">Loading Shantum...</div>
+  <section id="live-trades" class="sikka-panel">
+
+    <div class="trade-top">
+      <div>
+        <div class="trade-heading">
+          <h1>🔥 LIVE SIKKA TRADES</h1>
+          <span class="live-pill"><span class="live-dot"></span> LIVE</span>
+        </div>
+
+        <p class="trade-subtitle">
+          Real-time trades from Sikka.fun • Latest trades across multiple tokens
+        </p>
       </div>
 
-      <div id="sikka-trades-card" class="sikka-card">
-        <div class="loading">Loading Trades...</div>
+      <div class="trade-right">
+        <div>
+          <div id="current-date" class="date-box"></div>
+          <div class="auto-refresh"><span>●</span> Auto refresh: 20 seconds</div>
+        </div>
+        <button id="refresh-button" class="refresh">↻ Refresh Data</button>
       </div>
+    </div>
 
-    </section>
+    <div class="stats">
+      <div class="stat">
+        <small>TRADES LOADED</small>
+        <strong id="total-trades">0</strong>
+      </div>
+      <div class="stat tokens">
+        <small>TOKENS TRACKED</small>
+        <strong id="tokens-tracked">0</strong>
+      </div>
+      <div class="stat buy">
+        <small>BUY TRADES</small>
+        <strong id="buy-trades">0</strong>
+      </div>
+      <div class="stat sell">
+        <small>SELL TRADES</small>
+        <strong id="sell-trades">0</strong>
+      </div>
+    </div>
 
-    <section class="chart-section">
-      <div class="chart-card">
+    <div class="controls">
+      <input id="search" class="control" placeholder="🔎 Search token name or symbol...">
 
-        <div class="chart-header">
+      <select id="token-filter" class="control-select">
+        <option value="">All Tokens</option>
+      </select>
+
+      <select id="action-filter" class="control-select">
+        <option value="">All Actions</option>
+        <option value="buy">BUY</option>
+        <option value="sell">SELL</option>
+      </select>
+
+      <select id="time-filter" class="control-select">
+        <option value="">All Loaded</option>
+        <option value="3600">Last 1 Hour</option>
+        <option value="86400">Last 24 Hours</option>
+      </select>
+
+      <button id="chart-button" class="control-button">▥ Live Chart</button>
+
+      <a class="control-button" style="display:flex;align-items:center;justify-content:center;text-decoration:none"
+         href="https://join.sikka.fun/0ty8uzq" target="_blank">↗ Open Sikka.fun</a>
+    </div>
+
+    <div id="trade-status" class="loading">Loading latest Sikka trades...</div>
+
+    <div class="trade-table-wrap">
+      <div class="trade-table">
+        <div class="table-row table-head">
+          <div>#</div>
+          <div>TOKEN</div>
+          <div>ACTION</div>
+          <div>PRICE (USD)</div>
+          <div>PRICE (SHM)</div>
+          <div>TIME</div>
+        </div>
+
+        <div id="trade-body"></div>
+      </div>
+    </div>
+
+    <div class="bottom-table">
+      <div id="showing-text">Showing 0 trades</div>
+      <div id="pagination" class="pages"></div>
+      <div>Data source: Sikka.fun API (tokens + trades)</div>
+    </div>
+
+  </section>
+
+  <section id="shantum" class="lower-grid">
+
+    <div id="shantum-card" class="card">
+      <div class="loading">Loading Shantum...</div>
+    </div>
+
+    <div class="card">
+      <div class="chart-head">
+        <div class="chart-title">📊 Shantum Price Chart (USD)</div>
+        <div class="timeframes">
+          <button class="tf" data-timeframe="1h">1H</button>
+          <button class="tf active" data-timeframe="24h">1D</button>
+          <button class="tf" data-timeframe="7d">1W</button>
+          <button class="tf" data-timeframe="30d">1M</button>
+          <button class="tf" data-timeframe="all">ALL</button>
+        </div>
+      </div>
+      <div id="stm-chart">
+        <div class="loading">Loading chart...</div>
+      </div>
+    </div>
+
+  </section>
+
+  <div class="footer">Shantum ecosystem on Shardeum</div>
+</div>
+
+<script>
+  const $ = id => document.getElementById(id);
+
+  let allTrades = [];
+  let shmUsd = NaN;
+  let currentPage = 1;
+  const PAGE_SIZE = 10;
+  let chart = null;
+  let chartSeries = null;
+  let loading = false;
+
+  function esc(v) {
+    return String(v ?? "")
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;")
+      .replace(/'/g,"&#039;");
+  }
+
+  function num(v) {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : NaN;
+  }
+
+  function formatPrice(v) {
+    const n = num(v);
+    if (!Number.isFinite(n)) return "—";
+    if (n >= 1) return n.toFixed(4);
+    if (n >= .01) return n.toFixed(6);
+    return n.toFixed(10);
+  }
+
+  function getTimestamp(t) {
+    let n = Number(t?.timestamp || t?.t || t?.time || 0);
+    if (n > 0 && n < 100000000000) n *= 1000;
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function formatTime(t) {
+    const n = getTimestamp(t);
+    if (!n) return "—";
+
+    return new Intl.DateTimeFormat("en-IN", {
+      timeZone: "Asia/Kolkata",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true
+    }).format(new Date(n)) + " IST";
+  }
+
+  function formatDate() {
+    $("current-date").innerHTML =
+      new Intl.DateTimeFormat("en-IN", {
+        timeZone: "Asia/Kolkata",
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: true
+      }).format(new Date()) + " IST";
+  }
+
+  function renderShantumCard(p, info, shm) {
+    const stmShm = num(p.price);
+    const shmPrice = num(shm.priceUsd);
+    const usd = stmShm * shmPrice;
+
+    const current = num(info.currentSupply);
+    const max = num(info.maxSupply);
+    const pct = max > 0 ? Math.min(100, current / max * 100) : 0;
+
+    const contract =
+      info.contractAddress ||
+      info.address ||
+      p.contractAddress ||
+      p.address ||
+      "";
+
+    $("shantum-card").innerHTML = `
+      <div class="shantum-head">
+        <div class="shantum-identity">
+          <img class="shantum-logo"
+               src="/shantumlogo.jpg"
+               onerror="this.onerror=null;this.src='/shantum-logo.png'"
+               alt="Shantum">
           <div>
-            <h2>Shantum Market</h2>
-            <span>STM / SHM → USD</span>
-          </div>
-
-          <div class="chart-timeframes">
-            <button class="timeframe-button" data-timeframe="1m">1m</button>
-            <button class="timeframe-button" data-timeframe="5m">5m</button>
-            <button class="timeframe-button" data-timeframe="15m">15m</button>
-            <button class="timeframe-button" data-timeframe="30m">30m</button>
-            <button class="timeframe-button" data-timeframe="1h">1h</button>
-            <button class="timeframe-button" data-timeframe="4h">4h</button>
-            <button class="timeframe-button" data-timeframe="12h">12h</button>
-            <button class="timeframe-button active" data-timeframe="24h">24h</button>
+            <div class="shantum-name">${esc(p.name || "Shantum")} ✓</div>
+            <div class="shantum-symbol">${esc(p.symbol || "STM")}</div>
           </div>
         </div>
 
-        <div id="stm-chart" class="stm-chart">
-          <div class="chart-loading">Loading STM market data...</div>
+        <div class="mini-links">
+          <a class="mini-link" href="${esc(p.explorer || "https://explorer.shardeum.org/")}" target="_blank">Explorer ↗</a>
+          <a class="mini-link" href="https://t.me/shantumcoin" target="_blank">Telegram</a>
+          <a class="mini-link" href="https://x.com/Shantumcoin" target="_blank">𝕏 X</a>
         </div>
-
       </div>
-    </section>
 
-    <footer class="dashboard-footer">
-      Shantum ecosystem on Shardeum
-    </footer>
+      <div class="shantum-price">
+        ${Number.isFinite(usd) ? "$" + usd.toFixed(9) : "—"}
+      </div>
 
-  </main>
+      <div class="shantum-shm">
+        ${Number.isFinite(stmShm) ? stmShm.toFixed(9) : "—"} SHM
+      </div>
 
-  <script src="/app.js?v=5"></script>
+      <div class="info-grid">
+        <div class="info-box">
+          <small>Current Supply</small>
+          <strong>${Number.isFinite(current) ? current.toLocaleString("en-US",{maximumFractionDigits:2}) : "—"} STM</strong>
+        </div>
+        <div class="info-box">
+          <small>Max Supply</small>
+          <strong>${Number.isFinite(max) ? max.toLocaleString("en-US") : "—"} STM</strong>
+        </div>
+        <div class="info-box">
+          <small>Market Cap (USD)</small>
+          <strong>${Number.isFinite(usd * current) ? (usd * current).toLocaleString("en-US",{maximumFractionDigits:2}) : "—"}</strong>
+        </div>
+      </div>
+
+      <div class="supply">
+        <div class="supply-head">
+          <span>Supply Progress</span>
+          <strong>${pct.toFixed(2)}%</strong>
+        </div>
+        <div class="supply-bar">
+          <div class="supply-fill" style="width:${pct}%"></div>
+        </div>
+      </div>
+
+      ${
+        contract
+          ? `<div style="margin-top:12px;color:#6f89a7;font-size:9px;word-break:break-all">
+               Contract: ${esc(contract)}
+             </div>`
+          : ""
+      }
+    `;
+  }
+
+  async function loadShantum() {
+    try {
+      const [pRes, iRes, sRes] = await Promise.all([
+        fetch(`/api/shantum-price?_=${Date.now()}`, {cache:"no-store"}),
+        fetch(`/api/shantum?_=${Date.now()}`, {cache:"no-store"}),
+        fetch(`/api/shm-price?_=${Date.now()}`, {cache:"no-store"})
+      ]);
+
+      const p = await pRes.json();
+      const info = await iRes.json();
+      const shm = await sRes.json();
+
+      renderShantumCard(p, info, shm);
+    } catch (e) {
+      console.error(e);
+      $("shantum-card").innerHTML =
+        `<div class="error">Unable to load Shantum data.</div>`;
+    }
+  }
+
+  async function loadTrades() {
+    if (loading) return;
+    loading = true;
+
+    try {
+      $("trade-status").textContent = "Loading latest Sikka trades...";
+
+      const [tradeRes, shmRes] = await Promise.all([
+        fetch(`/api/sikka-live-trades?_=${Date.now()}`, {cache:"no-store"}),
+        fetch(`/api/shm-price?_=${Date.now()}`, {cache:"no-store"})
+      ]);
+
+      const data = await tradeRes.json();
+      const shm = shmRes.ok ? await shmRes.json() : {};
+
+      if (!data.success) {
+        throw new Error(data.error || "Sikka API error");
+      }
+
+      shmUsd = num(shm.priceUsd);
+
+      allTrades = Array.isArray(data.trades) ? [...data.trades] : [];
+
+      allTrades.sort((a,b) => getTimestamp(b) - getTimestamp(a));
+
+      $("total-trades").textContent =
+        Number(data.totalTrades || allTrades.length).toLocaleString("en-US");
+
+      $("tokens-tracked").textContent =
+        Number(data.tokensTracked || 0).toLocaleString("en-US");
+
+      $("buy-trades").textContent =
+        Number(data.buyTrades || 0).toLocaleString("en-US");
+
+      $("sell-trades").textContent =
+        Number(data.sellTrades || 0).toLocaleString("en-US");
+
+      buildTokenFilter();
+      currentPage = 1;
+      renderTrades();
+
+      $("trade-status").style.display = "none";
+    } catch (e) {
+      console.error(e);
+      $("trade-status").style.display = "block";
+      $("trade-status").className = "error";
+      $("trade-status").textContent = "Unable to load Sikka trades: " + e.message;
+    } finally {
+      loading = false;
+    }
+  }
+
+  function buildTokenFilter() {
+    const select = $("token-filter");
+    const old = select.value;
+
+    const tokens = [...new Map(
+      allTrades.map(t => [
+        String(t.token_ca || t.ticker || t.symbol || t.name || "").toLowerCase(),
+        t
+      ])
+    ).values()]
+      .sort((a,b) =>
+        String(a.name || a.ticker || "").localeCompare(
+          String(b.name || b.ticker || "")
+        )
+      );
+
+    select.innerHTML = `<option value="">All Tokens</option>` +
+      tokens.map(t => `
+        <option value="${esc(String(t.token_ca || t.ticker || t.symbol || t.name).toLowerCase())}">
+          ${esc(t.name || t.ticker || t.symbol || "Unknown")}
+        </option>
+      `).join("");
+
+    if ([...select.options].some(o => o.value === old)) {
+      select.value = old;
+    }
+  }
+
+  function filteredTrades() {
+    const search = $("search").value.trim().toLowerCase();
+    const token = $("token-filter").value.toLowerCase();
+    const action = $("action-filter").value.toLowerCase();
+    const seconds = Number($("time-filter").value || 0);
+    const now = Date.now();
+
+    return allTrades.filter(t => {
+      const name = String(t.name || "").toLowerCase();
+      const symbol = String(t.symbol || t.ticker || "").toLowerCase();
+      const address = String(t.token_ca || "").toLowerCase();
+      const type = String(t.type || "").toLowerCase();
+
+      if (search && !name.includes(search) && !symbol.includes(search)) return false;
+      if (token && address !== token && symbol !== token && name !== token) return false;
+      if (action && type !== action) return false;
+
+      if (seconds) {
+        const ts = getTimestamp(t);
+        if (!ts || now - ts > seconds * 1000) return false;
+      }
+
+      return true;
+    });
+  }
+
+  function renderTrades() {
+    const trades = filteredTrades();
+    const pages = Math.max(1, Math.ceil(trades.length / PAGE_SIZE));
+
+    if (currentPage > pages) currentPage = pages;
+
+    const start = (currentPage - 1) * PAGE_SIZE;
+    const rows = trades.slice(start, start + PAGE_SIZE);
+
+    $("trade-body").innerHTML = rows.length
+      ? rows.map((t,i) => {
+          const type = String(t.type || "").toLowerCase();
+          const buy = type === "buy";
+          const name = t.name || t.ticker || t.symbol || "Unknown";
+          const symbol = t.ticker || t.symbol || "";
+          const shmPrice = num(t.price);
+          const usdPrice =
+            Number.isFinite(shmPrice) && Number.isFinite(shmUsd)
+              ? shmPrice * shmUsd
+              : NaN;
+
+          const logo = t.image_url || "";
+
+          return `
+            <div class="table-row">
+              <div>${start + i + 1}</div>
+
+              <div class="token-cell">
+                ${
+                  logo
+                    ? `<img class="token-logo"
+                         src="${esc(logo)}"
+                         alt="${esc(symbol)}"
+                         loading="lazy"
+                         onerror="this.style.display='none'">`
+                    : ""
+                }
+                <div class="token-main">
+                  <strong>${esc(name)}</strong>
+                  <span>${esc(symbol)}</span>
+                </div>
+              </div>
+
+              <div class="${buy ? "action-buy" : "action-sell"}">
+                ${buy ? "🟢 BUY" : "🔴 SELL"}
+              </div>
+
+              <div class="price-usd">
+                ${Number.isFinite(usdPrice) ? "$" + formatPrice(usdPrice) : "—"}
+              </div>
+
+              <div class="price-shm">
+                ${Number.isFinite(shmPrice) ? formatPrice(shmPrice) : "—"} SHM
+              </div>
+
+              <div class="time">${esc(formatTime(t))}</div>
+            </div>
+          `;
+        }).join("")
+      : `<div class="loading">No matching trades.</div>`;
+
+    $("showing-text").textContent =
+      `Showing ${trades.length ? start + 1 : 0} - ${Math.min(start + PAGE_SIZE, trades.length)} of ${trades.length} loaded trades`;
+
+    renderPagination(pages);
+  }
+
+  function renderPagination(totalPages) {
+    const box = $("pagination");
+    let html = "";
+
+    html += `<button class="page-btn" ${currentPage === 1 ? "disabled" : ""}
+      onclick="goPage(${currentPage - 1})">‹</button>`;
+
+    const maxButtons = 7;
+    const from = Math.max(1, Math.min(currentPage - 2, totalPages - maxButtons + 1));
+    const to = Math.min(totalPages, from + maxButtons - 1);
+
+    for (let p = from; p <= to; p++) {
+      html += `<button class="page-btn ${p === currentPage ? "active" : ""}"
+        onclick="goPage(${p})">${p}</button>`;
+    }
+
+    html += `<button class="page-btn" ${currentPage === totalPages ? "disabled" : ""}
+      onclick="goPage(${currentPage + 1})">›</button>`;
+
+    box.innerHTML = html;
+  }
+
+  window.goPage = function(page) {
+    const total = Math.max(1, Math.ceil(filteredTrades().length / PAGE_SIZE));
+    currentPage = Math.max(1, Math.min(total, page));
+    renderTrades();
+  };
+
+  async function loadChart(timeframe = "24h") {
+    const container = $("stm-chart");
+
+    try {
+      container.innerHTML = `<div class="loading">Loading chart...</div>`;
+
+      const [cRes, sRes] = await Promise.all([
+        fetch(`/api/sikka-candles?timeframe=${encodeURIComponent(timeframe)}&limit=200&_=${Date.now()}`, {cache:"no-store"}),
+        fetch(`/api/shm-price?_=${Date.now()}`, {cache:"no-store"})
+      ]);
+
+      const data = await cRes.json();
+      const shm = await sRes.json();
+      const priceUsd = num(shm.priceUsd);
+
+      if (!data.success || !Array.isArray(data.candles) || !data.candles.length) {
+        throw new Error("No candle data available");
+      }
+
+      if (!Number.isFinite(priceUsd) || priceUsd <= 0) {
+        throw new Error("SHM/USD price unavailable");
+      }
+
+      if (chart) chart.remove();
+      container.innerHTML = "";
+
+      const points = data.candles
+        .map(c => ({
+          time: Number(c.t),
+          value: Number(c.c) * priceUsd
+        }))
+        .filter(p => Number.isFinite(p.time) && Number.isFinite(p.value))
+        .sort((a,b) => a.time - b.time);
+
+      chart = LightweightCharts.createChart(container, {
+        width: container.clientWidth,
+        height: 330,
+        layout: {
+          background: { color: "transparent" },
+          textColor: "#8fa8c5"
+        },
+        grid: {
+          vertLines: { color: "rgba(255,255,255,.05)" },
+          horzLines: { color: "rgba(255,255,255,.05)" }
+        },
+        rightPriceScale: {
+          borderColor: "rgba(255,255,255,.08)"
+        },
+        timeScale: {
+          borderColor: "rgba(255,255,255,.08)",
+          timeVisible: true
+        },
+        localization: {
+          priceFormatter: v => "$" + Number(v).toFixed(9)
+        }
+      });
+
+      chartSeries = chart.addSeries(LightweightCharts.BaselineSeries, {
+        baseValue: { type: "price", price: points[0].value },
+        topLineColor: "#19e59a",
+        topFillColor1: "rgba(25,229,154,.30)",
+        topFillColor2: "rgba(25,229,154,.04)",
+        bottomLineColor: "#ff4d6d",
+        bottomFillColor1: "rgba(255,77,109,.04)",
+        bottomFillColor2: "rgba(255,77,109,.25)",
+        priceFormat: {
+          type: "price",
+          precision: 9,
+          minMove: 0.000000001
+        }
+      });
+
+      chartSeries.setData(points);
+      chart.timeScale().fitContent();
+
+    } catch (e) {
+      console.error(e);
+      container.innerHTML =
+        `<div class="error">Unable to load chart.<br><small>${esc(e.message)}</small></div>`;
+    }
+  }
+
+  $("search").addEventListener("input", () => {
+    currentPage = 1;
+    renderTrades();
+  });
+
+  $("token-filter").addEventListener("change", () => {
+    currentPage = 1;
+    renderTrades();
+  });
+
+  $("action-filter").addEventListener("change", () => {
+    currentPage = 1;
+    renderTrades();
+  });
+
+  $("time-filter").addEventListener("change", () => {
+    currentPage = 1;
+    renderTrades();
+  });
+
+  $("refresh-button").addEventListener("click", async () => {
+    $("refresh-button").disabled = true;
+    $("refresh-button").textContent = "↻ Refreshing...";
+    formatDate();
+
+    await Promise.all([
+      loadTrades(),
+      loadShantum()
+    ]);
+
+    $("refresh-button").disabled = false;
+    $("refresh-button").textContent = "↻ Refresh Data";
+  });
+
+  $("chart-button").addEventListener("click", () => {
+    $("shantum").scrollIntoView({
+      behavior: "smooth",
+      block: "start"
+    });
+  });
+
+  document.querySelectorAll(".tf").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".tf").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      loadChart(btn.dataset.timeframe || "24h");
+    });
+  });
+
+  window.addEventListener("resize", () => {
+    const c = $("stm-chart");
+    if (chart && c) chart.resize(c.clientWidth, 330);
+  });
+
+  async function init() {
+    formatDate();
+    await Promise.all([
+      loadTrades(),
+      loadShantum(),
+      loadChart("24h")
+    ]);
+  }
+
+  init();
+
+  setInterval(() => {
+    formatDate();
+    loadTrades();
+    loadShantum();
+  }, 20000);
+</script>
+
 </body>
 </html>
