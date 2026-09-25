@@ -707,7 +707,7 @@ setInterval(() => {
     loadShantum();
     loadSikkaTrades();
   }
-}, 60 * 1000);
+}, 20 * 1000);
 
 // ==================================================
 // STM/USD CHART
