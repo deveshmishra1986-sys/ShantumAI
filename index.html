@@ -3,10 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Live Sikka Trades</title>
-  <link rel="icon" href="/shantum-logo.png">
-  <link rel="stylesheet" href="/style.css?v=10">
- <!-- Google tag (gtag.js) -->
+  <title>Shantum AI</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="stylesheet" href="/style.css?v=5">
+  <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+  <!-- Google tag (gtag.js) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-TRHTVZD6FB"></script>
 <script>
   window.dataLayer = window.dataLayer || [];
@@ -17,133 +18,65 @@
 </script>
 </head>
 <body>
-  <main class="page">
-    <header class="topbar">
-      <div>
-        <div class="brand-row">
-          <span class="fire">🔥</span>
-          <h1>LIVE SIKKA TRADES</h1>
-          <span class="live-pill"><span></span> LIVE</span>
-        </div>
-        <p class="subtitle">Real-time trades from Sikka.fun • Latest trades across multiple tokens</p>
-      </div>
+  <main class="dashboard">
 
-      <div class="top-actions">
-        <div class="date-time">
-          <strong id="currentDate">25 Sept 2026</strong>
-          <span id="currentTime">--:--:-- -- IST</span>
-        </div>
-        <button id="refreshBtn" class="refresh-btn">↻ &nbsp; Refresh Data</button>
-        <div class="auto-refresh"><span></span> Auto refresh: 60 seconds</div>
-      </div>
+    <header class="hero">
+      <div class="hero-badge">AI-POWERED SHARDEUM ECOSYSTEM</div>
+      <h1>Shantum AI</h1>
+      <p>AI Agent. Reward. Burn, Web3.</p>
+
+      <button id="refresh-button" class="refresh-button" type="button">
+        <span class="refresh-icon">↻</span>
+        Refresh Data
+      </button>
     </header>
 
-    <section class="stats-grid">
-      <div class="stat-card blue">
-        <div class="stat-icon">⇄</div>
-        <div>
-          <div class="stat-label">TRADES LOADED</div>
-          <div class="stat-value" id="tradeCount">0</div>
-          <div class="stat-note">Latest trades collected</div>
-        </div>
+    <section class="coins-grid">
+
+      <div id="shantum-card" class="coin-card shantum-card">
+        <div class="loading">Loading Shantum...</div>
       </div>
 
-      <div class="stat-card cyan">
-        <div class="stat-icon">●</div>
-        <div>
-          <div class="stat-label">TOKENS TRACKED</div>
-          <div class="stat-value" id="tokenCount">0</div>
-          <div class="stat-note">Tokens from Sikka</div>
-        </div>
+      <div id="sikka-trades-card" class="sikka-card">
+        <div class="loading">Loading Trades...</div>
       </div>
 
-      <div class="stat-card orange">
-        <div class="stat-icon">👥</div>
-        <div>
-          <div class="stat-label">BUY TRADES</div>
-          <div class="stat-value" id="buyCount">0</div>
-          <div class="stat-note" id="buyPercent">0% of loaded trades</div>
-        </div>
-      </div>
+    </section>
 
-      <div class="stat-card red">
-        <div class="stat-icon">👥</div>
-        <div>
-          <div class="stat-label">SELL TRADES</div>
-          <div class="stat-value" id="sellCount">0</div>
-          <div class="stat-note" id="sellPercent">0% of loaded trades</div>
+    <section class="chart-section">
+      <div class="chart-card">
+
+        <div class="chart-header">
+          <div>
+            <h2>Shantum Market</h2>
+            <span>STM / SHM → USD</span>
+          </div>
+
+          <div class="chart-timeframes">
+            <button class="timeframe-button" data-timeframe="1m">1m</button>
+            <button class="timeframe-button" data-timeframe="5m">5m</button>
+            <button class="timeframe-button" data-timeframe="15m">15m</button>
+            <button class="timeframe-button" data-timeframe="30m">30m</button>
+            <button class="timeframe-button" data-timeframe="1h">1h</button>
+            <button class="timeframe-button" data-timeframe="4h">4h</button>
+            <button class="timeframe-button" data-timeframe="12h">12h</button>
+            <button class="timeframe-button active" data-timeframe="24h">24h</button>
+          </div>
         </div>
+
+        <div id="stm-chart" class="stm-chart">
+          <div class="chart-loading">Loading STM market data...</div>
+        </div>
+
       </div>
     </section>
 
-    <section class="toolbar">
-      <div class="search-box">
-        <span>⌕</span>
-        <input id="searchInput" type="search" placeholder="Search token name or symbol...">
-      </div>
-
-      <select id="tokenFilter">
-        <option value="all">All Tokens</option>
-      </select>
-
-      <select id="actionFilter">
-        <option value="all">All Actions</option>
-        <option value="buy">BUY</option>
-        <option value="sell">SELL</option>
-      </select>
-
-      <select id="timeFilter">
-        <option value="all">All Loaded</option>
-        <option value="1h">Last 1 Hour</option>
-        <option value="6h">Last 6 Hours</option>
-        <option value="24h">Last 24 Hours</option>
-      </select>
-
-      <button id="chartBtn" class="tool-btn">▥ &nbsp; Live Chart</button>
-      <a class="tool-btn link-btn" href="https://join.sikka.fun/0ty8uzq" target="_blank" rel="noopener">↗ &nbsp; Open Sikka.fun</a>
-    </section>
-
-    <div id="status" class="status">Loading Sikka trades...</div>
-
-    <section class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>TOKEN</th>
-            <th>SYMBOL</th>
-            <th>ACTION</th>
-            <th>PRICE (USD)</th>
-            <th>PRICE (SHM)</th>
-            <th>SHM AMOUNT</th>
-            <th>TOKEN AMOUNT</th>
-            <th>TIME</th>
-          </tr>
-        </thead>
-        <tbody id="tradeBody"></tbody>
-      </table>
-    </section>
-
-    <footer class="table-footer">
-      <div id="showingText">Showing 0 trades</div>
-      <div class="pagination">
-        <button id="prevBtn">‹</button>
-        <div id="pageNumbers"></div>
-        <button id="nextBtn">›</button>
-      </div>
-      <div class="source">Data source: Sikka.fun API (tokens + trades)</div>
+    <footer class="dashboard-footer">
+      Shantum ecosystem on Shardeum
     </footer>
+
   </main>
 
-  <div id="chartModal" class="modal hidden">
-    <div class="modal-card">
-      <button id="closeChart" class="close">×</button>
-      <h2>Live Token Chart</h2>
-      <p>Select a token from the table filter to view its latest trade prices.</p>
-      <div id="miniChart" class="mini-chart"></div>
-    </div>
-  </div>
-
-  <script src="/app.js?v=10"></script>
+  <script src="/app.js?v=5"></script>
 </body>
 </html>
