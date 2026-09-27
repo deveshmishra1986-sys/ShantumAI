@@ -1,65 +1,51 @@
-const https = require("https");
-
 const RPC_URL = "https://api.shardeum.org";
 const MAX_ROWS = 10;
 const CACHE_MS = 15000;
 
 let cache = { at: 0, data: null };
 
-function rpc(method, params = []) {
-  return new Promise((resolve, reject) => {
-    const body = JSON.stringify({
-      jsonrpc: "2.0",
-      id: Date.now(),
-      method,
-      params
-    });
+async function rpc(method, params = []) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
 
-    const req = https.request(RPC_URL, {
+  try {
+    const response = await fetch(RPC_URL, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Content-Length": Buffer.byteLength(body)
-      },
-      timeout: 8000
-    }, res => {
-      let text = "";
-      res.setEncoding("utf8");
-      res.on("data", chunk => text += chunk);
-      res.on("end", () => {
-        try {
-          if (res.statusCode < 200 || res.statusCode >= 300) {
-            return reject(new Error(`Shardeum RPC HTTP ${res.statusCode}`));
-          }
-          const data = JSON.parse(text);
-          if (data.error) {
-            return reject(new Error(data.error.message || "Shardeum RPC error"));
-          }
-          resolve(data.result);
-        } catch (e) {
-          reject(new Error("Invalid JSON from Shardeum RPC"));
-        }
-      });
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: Date.now(),
+        method,
+        params
+      }),
+      signal: controller.signal
     });
 
-    req.on("timeout", () => req.destroy(new Error("Shardeum RPC timeout")));
-    req.on("error", reject);
-    req.write(body);
-    req.end();
-  });
+    const text = await response.text();
+    if (!response.ok) throw new Error(`Shardeum RPC HTTP ${response.status}`);
+
+    let data;
+    try { data = JSON.parse(text); }
+    catch { throw new Error("Invalid JSON from Shardeum RPC"); }
+
+    if (data.error) throw new Error(data.error.message || "Shardeum RPC error");
+    return data.result;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
-function hexToNumber(v) {
-  const n = Number.parseInt(String(v || "0x0"), 16);
+function hexToNumber(value) {
+  const n = Number.parseInt(String(value || "0x0"), 16);
   return Number.isFinite(n) ? n : 0;
 }
 
 function formatShm(value) {
   try {
     const wei = BigInt(value || "0x0");
-    const whole = wei / 1000000000000000000n;
-    const fraction = (wei % 1000000000000000000n)
-      .toString().padStart(18, "0").replace(/0+$/, "");
+    const base = 1000000000000000000n;
+    const whole = wei / base;
+    const fraction = (wei % base).toString().padStart(18, "0").replace(/0+$/, "");
     return fraction
       ? `${whole.toLocaleString("en-US")}.${fraction.slice(0, 9)}`
       : whole.toLocaleString("en-US");
@@ -88,10 +74,12 @@ function formatTime(timestamp) {
 
 async function gasFee(tx) {
   try {
-    const r = await rpc("eth_getTransactionReceipt", [tx.hash]);
-    if (!r) return "—";
-    const used = BigInt(r.gasUsed || "0x0");
-    const price = BigInt(r.effectiveGasPrice || r.gasPrice || tx.gasPrice || "0x0");
+    const receipt = await rpc("eth_getTransactionReceipt", [tx.hash]);
+    if (!receipt) return "—";
+    const used = BigInt(receipt.gasUsed || "0x0");
+    const price = BigInt(
+      receipt.effectiveGasPrice || receipt.gasPrice || tx.gasPrice || "0x0"
+    );
     return formatShm((used * price).toString());
   } catch {
     return "—";
@@ -101,7 +89,10 @@ async function gasFee(tx) {
 async function build() {
   const latestHex = await rpc("eth_blockNumber");
   const latest = hexToNumber(latestHex);
-  const block = await rpc("eth_getBlockByNumber", ["0x" + latest.toString(16), true]);
+  const block = await rpc(
+    "eth_getBlockByNumber",
+    ["0x" + latest.toString(16), true]
+  );
 
   if (!block || !Array.isArray(block.transactions)) {
     return { latestBlock: latest, activities: [] };
@@ -124,10 +115,15 @@ async function build() {
   return { latestBlock: latest, activities };
 }
 
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Cache-Control", "no-store");
   res.setHeader("Content-Type", "application/json; charset=utf-8");
+
+  if (req.method === "OPTIONS") return res.status(204).end();
+  if (req.method !== "GET") {
+    return res.status(405).json({ success: false, error: "Method not allowed" });
+  }
 
   try {
     const now = Date.now();
@@ -153,4 +149,4 @@ module.exports = async (req, res) => {
       error: error?.message || "Unable to read Shardeum blockchain"
     });
   }
-};
+}
