@@ -1,35 +1,46 @@
 const RPC_URL = "https://api.shardeum.org";
-const MAX_ROWS = 10;
+const BLOCKS_TO_SCAN = 12;
+const MAX_ROWS = 15;
 const CACHE_MS = 15000;
 
 let cache = { at: 0, data: null };
 
 async function rpc(method, params = []) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 8000);
-
+  const timer = setTimeout(() => controller.abort(), 10000);
   try {
     const response = await fetch(RPC_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: Date.now(),
-        method,
-        params
-      }),
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
       signal: controller.signal
     });
-
     const text = await response.text();
     if (!response.ok) throw new Error(`Shardeum RPC HTTP ${response.status}`);
-
-    let data;
-    try { data = JSON.parse(text); }
-    catch { throw new Error("Invalid JSON from Shardeum RPC"); }
-
+    const data = JSON.parse(text);
     if (data.error) throw new Error(data.error.message || "Shardeum RPC error");
     return data.result;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function rpcBatch(requests) {
+  if (!requests.length) return [];
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch(RPC_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(requests),
+      signal: controller.signal
+    });
+    const text = await response.text();
+    if (!response.ok) throw new Error(`Shardeum RPC HTTP ${response.status}`);
+    const data = JSON.parse(text);
+    if (!Array.isArray(data)) throw new Error("Invalid batch response from Shardeum RPC");
+    return data;
   } finally {
     clearTimeout(timer);
   }
@@ -72,47 +83,98 @@ function formatTime(timestamp) {
   }).format(new Date(seconds * 1000)) + " IST";
 }
 
-async function gasFee(tx) {
-  try {
-    const receipt = await rpc("eth_getTransactionReceipt", [tx.hash]);
-    if (!receipt) return "—";
-    const used = BigInt(receipt.gasUsed || "0x0");
-    const price = BigInt(
-      receipt.effectiveGasPrice || receipt.gasPrice || tx.gasPrice || "0x0"
-    );
-    return formatShm((used * price).toString());
-  } catch {
-    return "—";
-  }
-}
-
 async function build() {
   const latestHex = await rpc("eth_blockNumber");
   const latest = hexToNumber(latestHex);
-  const block = await rpc(
-    "eth_getBlockByNumber",
-    ["0x" + latest.toString(16), true]
-  );
+  if (!latest) throw new Error("Could not read latest Shardeum block");
 
-  if (!block || !Array.isArray(block.transactions)) {
-    return { latestBlock: latest, activities: [] };
-  }
-
-  const txs = [...block.transactions].reverse().slice(0, MAX_ROWS);
-  const activities = [];
-
-  for (const tx of txs) {
-    activities.push({
-      key: tx.hash,
-      type: typeOfTx(tx),
-      block: latest,
-      time: formatTime(block.timestamp),
-      amount: formatShm(tx.value),
-      gas: await gasFee(tx)
+  // Read several recent blocks in one JSON-RPC batch so an empty latest block
+  // does not leave the activity table empty.
+  const blockRequests = [];
+  for (let i = 0; i < BLOCKS_TO_SCAN; i++) {
+    const number = latest - i;
+    if (number < 0) break;
+    blockRequests.push({
+      jsonrpc: "2.0",
+      id: i + 1,
+      method: "eth_getBlockByNumber",
+      params: ["0x" + number.toString(16), true]
     });
   }
 
-  return { latestBlock: latest, activities };
+  const blockResponses = await rpcBatch(blockRequests);
+  const blocks = blockResponses
+    .filter(r => r && !r.error && r.result)
+    .map(r => r.result)
+    .filter(b => Array.isArray(b.transactions));
+
+  const txItems = [];
+  for (const block of blocks) {
+    const blockNumber = hexToNumber(block.number);
+    for (const tx of block.transactions) {
+      if (!tx || !tx.hash) continue;
+      txItems.push({
+        tx,
+        blockNumber,
+        timestamp: block.timestamp
+      });
+    }
+  }
+
+  txItems.sort((a, b) => {
+    if (b.blockNumber !== a.blockNumber) return b.blockNumber - a.blockNumber;
+    return String(b.tx.hash).localeCompare(String(a.tx.hash));
+  });
+
+  const selected = txItems.slice(0, MAX_ROWS);
+
+  // Receipts are requested as one batch, keeping the public RPC traffic low.
+  const receiptRequests = selected.map((item, index) => ({
+    jsonrpc: "2.0",
+    id: 1000 + index,
+    method: "eth_getTransactionReceipt",
+    params: [item.tx.hash]
+  }));
+
+  const receiptResponses = await rpcBatch(receiptRequests);
+  const receiptByHash = new Map();
+  for (const r of receiptResponses) {
+    if (r && r.result && r.result.transactionHash) {
+      receiptByHash.set(String(r.result.transactionHash).toLowerCase(), r.result);
+    }
+  }
+
+  const activities = selected.map(item => {
+    const tx = item.tx;
+    const receipt = receiptByHash.get(String(tx.hash).toLowerCase());
+    let gas = "—";
+
+    try {
+      if (receipt) {
+        const used = BigInt(receipt.gasUsed || "0x0");
+        const price = BigInt(
+          receipt.effectiveGasPrice || receipt.gasPrice || tx.gasPrice || "0x0"
+        );
+        gas = formatShm((used * price).toString());
+      }
+    } catch {}
+
+    return {
+      key: tx.hash,
+      type: typeOfTx(tx),
+      block: item.blockNumber,
+      time: formatTime(item.timestamp),
+      amount: formatShm(tx.value),
+      gas
+    };
+  });
+
+  return {
+    latestBlock: latest,
+    scannedBlocks: blocks.length,
+    transactionsFound: txItems.length,
+    activities
+  };
 }
 
 export default async function handler(req, res) {
@@ -127,7 +189,6 @@ export default async function handler(req, res) {
 
   try {
     const now = Date.now();
-
     if (cache.data && now - cache.at < CACHE_MS) {
       return res.status(200).json(cache.data);
     }
@@ -136,6 +197,8 @@ export default async function handler(req, res) {
     const payload = {
       success: true,
       latestBlock: result.latestBlock,
+      scannedBlocks: result.scannedBlocks,
+      transactionsFound: result.transactionsFound,
       activities: result.activities,
       updatedAt: new Date().toISOString()
     };
