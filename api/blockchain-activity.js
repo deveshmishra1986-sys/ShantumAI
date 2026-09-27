@@ -1,62 +1,119 @@
-// Shantum AI - Blockchain Activity API v5
-// Vercel ES module. Uses standard Ethereum JSON-RPC transaction-index methods
-// instead of relying on block.transactions[], which was empty on the public RPC.
+const DEFAULT_COLLECTOR = "https://explorer.shardeum.org";
+const MAX_TRANSACTIONS = 20;
+const TIMEOUT_MS = 12000;
 
-const RPC = "https://api.shardeum.org";
-const MAX_BLOCKS = 6;
-const MAX_TX = 12;
-const REQUEST_TIMEOUT = 12000;
-
-async function rpc(method, params, id) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+function hexOrDecimalToBigInt(value) {
+  if (value === null || value === undefined || value === "") return 0n;
   try {
-    const r = await fetch(RPC, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
-      signal: controller.signal,
-      cache: "no-store"
-    });
-    const text = await r.text();
-    let data;
-    try { data = JSON.parse(text); } catch { throw new Error(`RPC returned non-JSON (${r.status})`); }
-    if (!r.ok) throw new Error(`RPC HTTP ${r.status}`);
-    if (data.error) throw new Error(`${method}: ${data.error.message || JSON.stringify(data.error)}`);
-    return data.result;
-  } finally {
-    clearTimeout(timer);
+    const s = String(value);
+    return s.startsWith("0x") || s.startsWith("0X")
+      ? BigInt(s)
+      : BigInt(s);
+  } catch {
+    return 0n;
   }
 }
 
-function hexToNumber(v) {
-  if (v == null) return 0;
-  return Number.parseInt(v, 16);
+function formatShm(value) {
+  const wei = typeof value === "bigint" ? value : hexOrDecimalToBigInt(value);
+  const base = 1000000000000000000n;
+  const whole = wei / base;
+  const fraction = (wei % base).toString().padStart(18, "0").replace(/0+$/, "");
+  return fraction ? `${whole}.${fraction}` : `${whole}`;
 }
 
-function hexToBigInt(v) {
-  try { return BigInt(v || "0x0"); } catch { return 0n; }
-}
+function transactionType(tx) {
+  const raw = String(tx?.transactionType ?? "").toLowerCase();
 
-function formatShm(wei) {
-  const w = typeof wei === "bigint" ? wei : hexToBigInt(wei);
-  const whole = w / 1000000000000000000n;
-  const frac = (w % 1000000000000000000n).toString().padStart(18, "0").replace(/0+$/, "");
-  return frac ? `${whole}.${frac}` : `${whole}`;
-}
+  // The Collector API exposes a transactionType field. The documented
+  // example uses transactionType 0 for a normal EVM transaction.
+  if (raw === "0" || raw === "transfer") return "TRANSFER";
 
-function classify(tx) {
-  const value = hexToBigInt(tx?.value);
-  const data = String(tx?.input || tx?.data || "0x");
-  if (tx?.to && (data === "0x" || data === "0x0")) {
-    return value > 0n ? "TRANSFER" : "CONTRACT";
-  }
+  // Do not guess STAKE/UNSTAKE/DELETE from arbitrary EVM calldata.
+  // If the indexer supplies a textual type, preserve the useful category.
+  if (raw.includes("stake") && raw.includes("unstake")) return "UNSTAKE";
+  if (raw.includes("stake")) return "STAKE";
+  if (raw.includes("reward")) return "REWARD";
+
   return "CONTRACT";
 }
 
-function isoFromHexTimestamp(ts) {
-  const seconds = hexToNumber(ts);
-  return seconds ? new Date(seconds * 1000).toISOString() : null;
+function pickReceipt(tx) {
+  return (
+    tx?.wrappedEVMAccount?.readableReceipt ||
+    tx?.readableReceipt ||
+    tx?.receipt ||
+    tx?.wrappedEVMAccount?.receipt ||
+    null
+  );
+}
+
+function getValueWei(tx, receipt) {
+  return (
+    tx?.wrappedEVMAccount?.readableReceipt?.value ??
+    receipt?.value ??
+    tx?.value ??
+    tx?.wrappedEVMAccount?.amountSpent ??
+    "0x0"
+  );
+}
+
+function getGasFeeWei(tx, receipt) {
+  const gasUsed =
+    receipt?.gasUsed ??
+    tx?.wrappedEVMAccount?.readableReceipt?.gasUsed ??
+    tx?.gasUsed;
+
+  const gasPrice =
+    receipt?.effectiveGasPrice ??
+    receipt?.gasPrice ??
+    tx?.effectiveGasPrice ??
+    tx?.gasPrice ??
+    tx?.wrappedEVMAccount?.readableReceipt?.gasPrice;
+
+  if (gasUsed === undefined || gasPrice === undefined) return 0n;
+
+  return hexOrDecimalToBigInt(gasUsed) * hexOrDecimalToBigInt(gasPrice);
+}
+
+function normalizeTimestamp(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  // Collector timestamps are documented in milliseconds.
+  return new Date(n).toISOString();
+}
+
+async function fetchJson(url) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: { accept: "application/json" },
+      cache: "no-store",
+      signal: controller.signal
+    });
+
+    const text = await response.text();
+
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error(`Indexer returned non-JSON (HTTP ${response.status})`);
+    }
+
+    if (!response.ok) {
+      throw new Error(
+        `Indexer HTTP ${response.status}: ${data?.error || data?.message || "request failed"}`
+      );
+    }
+
+    return data;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export default async function handler(req, res) {
@@ -64,95 +121,75 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
 
   if (req.method !== "GET") {
-    return res.status(405).json({ success: false, error: "GET only" });
+    return res.status(405).json({
+      success: false,
+      error: "GET only"
+    });
   }
 
   try {
-    const latestHex = await rpc("eth_blockNumber", [], 1);
-    const latest = hexToNumber(latestHex);
-    const activities = [];
-    const scanned = [];
+    // Optional Vercel environment override:
+    // SHARDEUM_COLLECTOR_URL=https://your-collector-host
+    // Otherwise the official Shardeum Explorer host is used.
+    const base = (
+      process.env.SHARDEUM_COLLECTOR_URL ||
+      DEFAULT_COLLECTOR
+    ).replace(/\/+$/, "");
 
-    // Use eth_getBlockTransactionCountByNumber + eth_getTransactionByBlockNumberAndIndex.
-    // This avoids relying on the empty `transactions` array returned by the tested block query.
-    for (let offset = 0; offset < MAX_BLOCKS && activities.length < MAX_TX; offset++) {
-      const blockNumber = latest - offset;
-      if (blockNumber < 0) break;
+    const url = new URL(`${base}/api/transaction`);
+    url.searchParams.set("count", String(MAX_TRANSACTIONS));
+    url.searchParams.set("page", "1");
+    url.searchParams.set("_", String(Date.now()));
 
-      const blockHex = "0x" + blockNumber.toString(16);
-      const countHex = await rpc(
-        "eth_getBlockTransactionCountByNumber",
-        [blockHex],
-        10 + offset
-      );
-      const count = hexToNumber(countHex);
-      scanned.push({ block: blockNumber, transactionCount: count });
+    const data = await fetchJson(url.toString());
 
-      if (!count) continue;
-
-      const limit = Math.min(count, MAX_TX - activities.length);
-
-      // Fetch transactions sequentially to stay comfortably below public RPC limits.
-      for (let i = 0; i < limit; i++) {
-        const tx = await rpc(
-          "eth_getTransactionByBlockNumberAndIndex",
-          [blockHex, "0x" + i.toString(16)],
-          100 + offset * 20 + i
-        );
-        if (!tx) continue;
-
-        const block = await rpc(
-          "eth_getBlockByNumber",
-          [blockHex, false],
-          500 + offset
-        );
-
-        let gasFeeWei = 0n;
-        let receiptError = null;
-
-        try {
-          const receipt = await rpc(
-            "eth_getTransactionReceipt",
-            [tx.hash],
-            700 + activities.length
-          );
-          if (receipt) {
-            const gasUsed = hexToBigInt(receipt.gasUsed);
-            const gasPrice = hexToBigInt(receipt.effectiveGasPrice || tx.gasPrice);
-            gasFeeWei = gasUsed * gasPrice;
-          }
-        } catch (e) {
-          receiptError = e.message;
-        }
-
-        activities.push({
-          type: classify(tx),
-          block: blockNumber,
-          time: isoFromHexTimestamp(block?.timestamp),
-          amountShm: formatShm(tx.value),
-          gasFeeShm: formatShm(gasFeeWei),
-          txHash: tx.hash,
-          _receiptError: receiptError
-        });
-
-        if (activities.length >= MAX_TX) break;
-      }
+    if (!data || data.success === false) {
+      throw new Error(data?.error || "Shardeum transaction indexer failed");
     }
+
+    const sourceTransactions = Array.isArray(data.transactions)
+      ? data.transactions
+      : [];
+
+    const activities = sourceTransactions
+      .map((tx) => {
+        const receipt = pickReceipt(tx);
+        const gasFeeWei = getGasFeeWei(tx, receipt);
+        const amountWei = getValueWei(tx, receipt);
+
+        return {
+          type: transactionType(tx),
+          block: Number(tx?.blockNumber ?? receipt?.blockNumber ?? 0),
+          time: normalizeTimestamp(tx?.timestamp),
+          amountShm: formatShm(amountWei),
+          gasFeeShm: formatShm(gasFeeWei)
+        };
+      })
+      .filter((x) => Number.isFinite(x.block) && x.block > 0)
+      .sort((a, b) => {
+        const ta = a.time ? Date.parse(a.time) : 0;
+        const tb = b.time ? Date.parse(b.time) : 0;
+        return tb - ta || b.block - a.block;
+      });
 
     return res.status(200).json({
       success: true,
-      latestBlock: latest,
-      scannedBlocks: scanned,
+      source: "Shardeum Collector API",
+      sourceUrl: `${base}/api/transaction`,
       transactionsFound: activities.length,
       activities,
       updatedAt: new Date().toISOString()
     });
   } catch (error) {
-    console.error("blockchain-activity v5:", error);
-    return res.status(500).json({
+    console.error("blockchain-activity v6:", error);
+
+    return res.status(502).json({
       success: false,
-      error: error?.message || "Blockchain API failed",
-      rpc: RPC,
+      error: error?.message || "Unable to load Shardeum blockchain activity",
+      hint:
+        "The official Collector API is documented at /api/transaction. " +
+        "If the public Explorer does not expose that route in your deployment, " +
+        "set SHARDEUM_COLLECTOR_URL in Vercel to your approved Collector host.",
       updatedAt: new Date().toISOString()
     });
   }
