@@ -54,7 +54,27 @@ button,input,select{font:inherit}
   background:linear-gradient(145deg,#071a31,#031021);
   padding:18px;overflow:hidden
 }
-.sikka-top{display:flex;justify-content:space-between;gap:20px}
+.sikka-top{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(320px,1.15fr) auto;align-items:center;gap:0}
+
+/* HOUDINI BUY SHM PROMO - inserted into the existing Sikka header without changing trade logic */
+.buy-shm-box{
+  min-width:0;display:flex;align-items:center;justify-content:space-between;gap:18px;
+  padding:4px 18px;border-left:1px solid #155083;border-right:1px solid #155083;
+}
+.buy-shm-copy{min-width:0}
+.buy-shm-title{font-size:17px;font-weight:900;white-space:nowrap}
+.buy-shm-title span{color:#16a1ff}
+.buy-shm-sub{margin-top:6px;color:#9db6d2;font-size:11px;white-space:nowrap}
+.buy-shm-actions{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex:0 0 auto}
+.buy-shm-btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  min-width:145px;height:40px;padding:0 15px;border-radius:9px;
+  background:#168ff1;color:#fff;text-decoration:none;font-size:12px;font-weight:900;
+  box-shadow:0 5px 18px rgba(22,143,241,.18);transition:filter .15s ease,transform .15s ease
+}
+.buy-shm-btn:hover{filter:brightness(1.08);transform:translateY(-1px)}
+.buy-shm-ref{color:#7f9bb8;font-size:9px;white-space:nowrap}
+.buy-shm-ref b{color:var(--green)}
 .sikka-title{display:flex;align-items:center;gap:10px}
 .sikka-title h1{font-size:26px;margin:0}
 .live{
@@ -103,7 +123,7 @@ button,input,select{font:inherit}
 .table{min-width:1000px}
 .row{
   display:grid;
-  grid-template-columns:42px 2.1fr .8fr 1.15fr 1.15fr 1.05fr;
+  grid-template-columns:42px 2.35fr .8fr 1.15fr 1.05fr 1.15fr .95fr 1.15fr;
   align-items:center;min-height:48px;padding:0 11px;
   border-top:1px solid rgba(255,255,255,.045)
 }
@@ -124,6 +144,41 @@ button,input,select{font:inherit}
 .usd{font-size:12px;font-weight:800;white-space:nowrap}
 .shm{color:#9eb6d0;font-size:11px;white-space:nowrap}
 .time{color:#9eb4cd;font-size:11px;white-space:nowrap}
+
+.change{font-size:11px;font-weight:900;white-space:nowrap}
+.change-up{color:var(--green)}
+.change-down{color:var(--red)}
+.change-flat{color:#aabbd0}
+.change-na{color:#7188a2;font-weight:700}
+.mcap{font-size:11px;font-weight:900;white-space:nowrap;color:#dcecff}
+
+.buy-inline{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  margin-left:8px;
+  padding:6px 10px;
+  border:1px solid rgba(24,227,154,.55);
+  border-radius:8px;
+  background:linear-gradient(135deg,#18e39a,#12b97f);
+  color:#02140f;
+  text-decoration:none;
+  font-size:9px;
+  font-weight:900;
+  letter-spacing:.3px;
+  line-height:1;
+  white-space:nowrap;
+  box-shadow:0 3px 10px rgba(24,227,154,.16);
+  transition:transform .15s ease,filter .15s ease,box-shadow .15s ease;
+}
+.buy-inline:hover{
+  filter:brightness(1.08);
+  transform:translateY(-1px);
+  box-shadow:0 5px 14px rgba(24,227,154,.28);
+}
+.buy-inline:active{
+  transform:translateY(0);
+}
 
 .bottom{display:flex;justify-content:space-between;align-items:center;margin-top:11px;color:#91a9c4;font-size:11px}
 .pages{display:flex;gap:5px}
@@ -193,7 +248,10 @@ button,input,select{font:inherit}
   .page{width:calc(100% - 12px)}
   .header{gap:12px}.nav{display:none}.links{margin-left:auto}
   .links a{padding:5px 7px;font-size:9px}
-  .sikka-top{flex-direction:column}
+  .sikka-top{grid-template-columns:1fr;gap:12px}
+  .buy-shm-box{border:1px solid #155083;border-radius:10px;padding:11px 12px}
+  .buy-shm-title{font-size:15px}
+  .buy-shm-sub{font-size:10px}
   .sikka-right{justify-content:space-between}
   .stats{grid-template-columns:1fr 1fr}
   .controls{grid-template-columns:1fr 1fr}
@@ -203,6 +261,102 @@ button,input,select{font:inherit}
   .price{font-size:28px}
   .info{grid-template-columns:1fr}
   .bottom{flex-direction:column;align-items:flex-start;gap:8px}
+}
+
+/* LIVE SHARDEUM BLOCKCHAIN ACTIVITY - VERCEL RPC API */
+const CHAIN_ROWS = 15;
+let chainRows = [];
+let chainLoading = false;
+
+function chainSetLive(live, text){
+  const el=$("chainLive");
+  const meta=$("chainMeta");
+  if(!el || !meta) return;
+  el.innerHTML=`<i class="dot"></i> ${live ? "LIVE" : "OFFLINE"}`;
+  el.style.color=live ? "#18e39a" : "#ff4d6d";
+  el.style.borderColor=live ? "rgba(24,227,154,.35)" : "rgba(255,77,109,.35)";
+  meta.textContent=text || (live ? "Auto updating from Shardeum RPC" : "Blockchain unavailable");
+}
+
+function renderChainRows(){
+  const body=$("chainBody");
+  if(!body) return;
+  if(!chainRows.length){
+    body.innerHTML='<div class="chain-status">Waiting for blockchain transactions...</div>';
+    return;
+  }
+  body.innerHTML=chainRows.slice(0,CHAIN_ROWS).map(r=>`
+    <div class="chain-row">
+      <div class="chain-cell chain-type">${esc(r.type)}</div>
+      <div class="chain-cell chain-block">${esc(String(r.block))}</div>
+      <div class="chain-cell chain-time">${esc(r.time)}</div>
+      <div class="chain-cell chain-amount">${esc(r.amount)} SHM</div>
+      <div class="chain-cell chain-gas">${esc(r.gas)} SHM</div>
+    </div>`).join("");
+}
+
+async function loadBlockchainActivity(){
+  if(chainLoading) return;
+  chainLoading=true;
+  try{
+    const response=await fetch("/api/blockchain-activity?_="+Date.now(),{cache:"no-store"});
+    const data=await response.json();
+    if(!response.ok || !data.success) throw new Error(data.error || "Blockchain API error");
+
+    chainRows=Array.isArray(data.activities) ? data.activities.slice(0,CHAIN_ROWS) : [];
+    renderChainRows();
+
+    const block=data.latestBlock ? Number(data.latestBlock).toLocaleString("en-US") : "—";
+    chainSetLive(true,"Auto updating • Last block "+block);
+  }catch(e){
+    console.error("Blockchain activity error:",e);
+    if(!chainRows.length){
+      $("chainBody").innerHTML='<div class="chain-status error">Unable to load Shardeum blockchain activity.</div>';
+    }
+    chainSetLive(false,"RPC temporarily unavailable • retrying automatically");
+  }finally{
+    chainLoading=false;
+  }
+}
+
+loadBlockchainActivity();
+setInterval(loadBlockchainActivity,20000);
+
+/* SHARDEUM GAS PRICE - ADDED AT THE VERY END */
+.gas-card{width:100%;margin-top:14px;border:1px solid #155083;border-radius:15px;background:linear-gradient(145deg,#071a31,#031021);padding:18px}
+.gas-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+.gas-title{font-size:22px;font-weight:900}
+.gas-live{color:#18e39a;font-size:12px;font-weight:900}
+.gas-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:11px}
+.gas-box{border:1px solid #164d7c;border-radius:11px;padding:14px 15px;background:rgba(5,22,42,.72);min-height:114px}
+.gas-box small{display:block;color:#8ca8c6;font-size:10px;margin-bottom:9px}
+.gas-box strong{display:block;font-size:22px;line-height:1.35;word-break:break-word}
+@media(max-width:700px){.gas-grid{grid-template-columns:1fr}.gas-title{font-size:19px}.gas-box strong{font-size:20px}}
+
+
+/* LIVE BLOCKCHAIN ACTIVITY */
+.chain-card{width:100%;margin-top:14px;border:1px solid #155083;border-radius:15px;background:linear-gradient(145deg,#071a31,#031021);padding:18px}
+.chain-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+.chain-title{display:flex;align-items:center;gap:10px;min-width:0}
+.chain-title h2{font-size:22px;font-weight:900;margin:0}
+.chain-live{display:flex;align-items:center;gap:7px;color:#18e39a;background:rgba(24,227,154,.08);border:1px solid rgba(24,227,154,.35);border-radius:18px;padding:6px 11px;font-size:11px;font-weight:800;white-space:nowrap}
+.chain-meta{color:#91a9c4;font-size:10px;text-align:right}
+.chain-table-wrap{overflow-x:auto;border-radius:11px;border:1px solid rgba(255,255,255,.06)}
+.chain-table{min-width:700px}
+.chain-row{display:grid;grid-template-columns:1fr 1fr 1.35fr 1.35fr 1.35fr;align-items:center;min-height:48px;padding:0 11px;border-top:1px solid rgba(255,255,255,.045)}
+.chain-row.head{min-height:41px;background:#18283f;border:0;color:#dcecff;font-size:10px;font-weight:900}
+.chain-cell{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chain-type{font-weight:900;color:#18e39a}
+.chain-block{color:#dcecff;font-weight:800}
+.chain-time{color:#9eb4cd}
+.chain-amount{color:#dcecff;font-weight:800}
+.chain-gas{color:#9eb6d0}
+.chain-status{padding:22px;text-align:center;color:#91a9c4;font-size:12px}
+@media(max-width:700px){
+  .chain-card{padding:12px}
+  .chain-head{align-items:flex-start;flex-direction:column}
+  .chain-meta{text-align:left}
+  .chain-title h2{font-size:19px}
 }
 </style>
 </head>
@@ -232,6 +386,17 @@ button,input,select{font:inherit}
       </div>
       <div class="subtitle">Real-time trades from Sikka.fun • Latest trades across multiple tokens</div>
     </div>
+    <div class="buy-shm-box" aria-label="Buy SHM on Houdini Swap">
+      <div class="buy-shm-copy">
+        <div class="buy-shm-title">Buy SHM <span>on Houdini</span></div>
+        <div class="buy-shm-sub">Swap for SHM through Houdini Swap</div>
+      </div>
+      <div class="buy-shm-actions">
+        <a class="buy-shm-btn" href="https://app.houdiniswap.com/pointless/signup?referral_code=vm5bpq" target="_blank" rel="noopener noreferrer">↗ Buy SHM</a>
+        <div class="buy-shm-ref"><b>●</b> Multi Chain Dex</div>
+      </div>
+    </div>
+
     <div class="sikka-right">
       <div>
         <div id="date" class="date"></div>
@@ -258,7 +423,7 @@ button,input,select{font:inherit}
       <option value="">All Loaded</option><option value="3600">Last 1 Hour</option><option value="86400">Last 24 Hours</option>
     </select>
     <button id="chartButton" class="control-btn">▥ Live Chart</button>
-    <a class="control-btn" href="https://join.sikka.fun/0ty8uzq" target="_blank">↗ Open Sikka.fun</a>
+    <a class="control-btn" href="https://join.sikka.fun/0ty8uzq" target="_blank" rel="noopener noreferrer">↗ Open Sikka.fun</a>
   </div>
 
   <div id="status" class="status">
@@ -271,7 +436,7 @@ button,input,select{font:inherit}
   <div class="table-wrap">
     <div class="table">
       <div class="row head">
-        <div>#</div><div>TOKEN</div><div>ACTION</div><div>PRICE (USD)</div><div>PRICE (SHM)</div><div>TIME</div>
+        <div>#</div><div>TOKEN</div><div>ACTION</div><div>PRICE (SHM)</div><div>TIME</div><div>PRICE (USD)</div><div>CHANGE</div><div>MCAP (USD)</div>
       </div>
       <div id="body"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
     </div>
@@ -281,6 +446,24 @@ button,input,select{font:inherit}
     <div id="showing">Showing 0 trades</div>
     <div id="pages" class="pages"></div>
     <div>Data source: Sikka.fun API (tokens + trades)</div>
+  </div>
+</section>
+
+<section class="chain-card" id="blockchain-activity">
+  <div class="chain-head">
+    <div class="chain-title">
+      <h2>⛓️ Live Blockchain Activity</h2>
+      <span id="chainLive" class="chain-live"><i class="dot"></i> LIVE</span>
+    </div>
+    <div id="chainMeta" class="chain-meta">Loading Shardeum blockchain activity...</div>
+  </div>
+  <div class="chain-table-wrap">
+    <div class="chain-table">
+      <div class="chain-row head">
+        <div>TYPE</div><div>BLOCK</div><div>TIME</div><div>AMOUNT (SHM)</div><div>GAS FEE (SHM)</div>
+      </div>
+      <div id="chainBody"><div class="chain-status">Loading live blockchain activity...</div></div>
+    </div>
   </div>
 </section>
 
@@ -303,17 +486,75 @@ button,input,select{font:inherit}
 </section>
 
 <div class="footer">Shantum ecosystem on Shardeum</div>
+
+<section class="gas-card" id="gas-price">
+  <div class="gas-head">
+    <div class="gas-title">⛽ Shardeum Gas Price</div>
+    <div id="gasLive" class="gas-live">● LIVE</div>
+  </div>
+  <div class="gas-grid">
+    <div class="gas-box"><small>GAS PRICE</small><strong id="gasPrice">Loading...</strong></div>
+    <div class="gas-box"><small>STANDARD TRANSFER (21,000 GAS)</small><strong id="gasFee">Loading...</strong></div>
+    <div class="gas-box"><small>RAW GAS PRICE</small><strong id="gasWei">Loading...</strong></div>
+  </div>
+</section>
 </div>
 
 <script>
 const $=id=>document.getElementById(id);
-let trades=[],shmUsd=NaN,page=1,chart=null;
+let trades = [];
+let tokenMarketCaps = new Map();
+
+let shmUsd = Number(localStorage.getItem("shmUsdLastValid"));
+
+if (!Number.isFinite(shmUsd) || shmUsd <= 0) {
+  shmUsd = NaN;
+}
+
+let page = 1;
+let chart = null;
 const PAGE=10;
 
 function esc(v){return String(v??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
 function n(v){const x=Number(v);return Number.isFinite(x)?x:NaN}
 function ts(t){let x=Number(t?.t||t?.timestamp||0);if(x&&x<100000000000)x*=1000;return Number.isFinite(x)?x:0}
-function price(v){const x=n(v);if(!Number.isFinite(x))return"—";if(x>=1)return x.toFixed(4);if(x>=.01)return x.toFixed(6);return x.toFixed(10)}
+function price(v){
+ const x=n(v);
+ if(!Number.isFinite(x))return"";
+ if(x>=1)return x.toFixed(4);
+ if(x>=.01)return x.toFixed(6);
+ if(x>=.0001)return x.toFixed(8);
+ if(x>=.000001)return x.toFixed(10);
+ return x.toPrecision(8);
+}
+function marketCapPrice(v){
+  const x = Number(v);
+  if(!Number.isFinite(x) || x <= 0) return "";
+  if(x >= 1e9) return "$" + (x / 1e9).toFixed(2).replace(/\.00$/, "") + "B";
+  if(x >= 1e6) return "$" + (x / 1e6).toFixed(2).replace(/\.00$/, "") + "M";
+  if(x >= 1e3) return "$" + (x / 1e3).toFixed(2).replace(/\.00$/, "") + "K";
+  return "$" + x.toFixed(2);
+}
+function usdPrice(v){
+  const x = Number(v);
+
+  if (!Number.isFinite(x) || x <= 0) return "";
+
+  // Keep normal USD prices readable
+  if (x >= 1) return x.toFixed(4);
+  if (x >= 0.01) return x.toFixed(6);
+  if (x >= 0.0001) return x.toFixed(8);
+  if (x >= 0.000001) return x.toFixed(10);
+
+  // Very small token prices:
+  // show enough decimal places so they never become 0.00000000
+  const decimals = Math.min(
+    18,
+    Math.max(12, Math.ceil(-Math.log10(x)) + 6)
+  );
+
+  return x.toFixed(decimals).replace(/0+$/, "").replace(/\.$/, "");
+}
 function ist(t){
  const x=ts(t);if(!x)return"—";
  return new Intl.DateTimeFormat("en-IN",{timeZone:"Asia/Kolkata",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:true}).format(new Date(x))+" IST"
@@ -342,14 +583,34 @@ async function loadTrades(showLoader=true){
   ]);
   const d=await a.json(),s=b.ok?await b.json():{};
   if(!d.success)throw new Error(d.error||"Sikka API error");
-  shmUsd=n(s.priceUsd);
-  trades=Array.isArray(d.trades)?[...d.trades]:[];
-  trades.sort((a,b)=>ts(b)-ts(a));
+  const newShmUsd = n(s.priceUsd);
 
-  $("total").textContent=Number(d.totalTrades||trades.length).toLocaleString();
-  $("tokens").textContent=Number(d.tokensTracked||0).toLocaleString();
-  $("buys").textContent=Number(d.buyTrades||0).toLocaleString();
-  $("sells").textContent=Number(d.sellTrades||0).toLocaleString();
+if (Number.isFinite(newShmUsd) && newShmUsd > 0) {
+  shmUsd = newShmUsd;
+  localStorage.setItem("shmUsdLastValid", String(shmUsd));
+}
+  tokenMarketCaps = new Map(
+    (Array.isArray(d.tokens) ? d.tokens : [])
+      .map(t => {
+        const key = String(t.token_ca || t.symbol || t.ticker || t.name || "").toLowerCase();
+        const cap = n(t.marketCapUsd);
+        return [key, Number.isFinite(cap) && cap > 0 ? cap : NaN];
+      })
+      .filter(([key]) => key)
+  );
+
+  trades=Array.isArray(d.trades)?[...d.trades]:[];
+  trades.sort((a,b)=>{const dt=ts(b)-ts(a);return dt!==0?dt:String(b.tx||"").localeCompare(String(a.tx||""));});
+  trades=trades.slice(0,100);
+
+  // Stats always describe the 100 trades actually shown/loaded in this table.
+  const loadedBuys=trades.filter(t=>String(t.type||"").toLowerCase()==="buy").length;
+  const loadedSells=trades.filter(t=>String(t.type||"").toLowerCase()==="sell").length;
+  const loadedTokens=new Set(trades.map(t=>String(t.token_ca||t.symbol||t.name||"").toLowerCase()).filter(Boolean)).size;
+  $("total").textContent=trades.length.toLocaleString();
+  $("tokens").textContent=loadedTokens.toLocaleString();
+  $("buys").textContent=loadedBuys.toLocaleString();
+  $("sells").textContent=loadedSells.toLocaleString();
 
   buildTokens();page=1;render();
   $("status").style.display="none";
@@ -373,7 +634,7 @@ function filtered(){
  const q=$("search").value.toLowerCase().trim(),tok=$("tokenFilter").value,act=$("actionFilter").value,sec=Number($("timeFilter").value||0),now=Date.now();
  return trades.filter(t=>{
   const name=String(t.name||"").toLowerCase(),sym=String(t.symbol||t.ticker||"").toLowerCase(),key=String(t.token_ca||t.symbol||t.name||"").toLowerCase(),type=String(t.type||"").toLowerCase();
-  if(q&&!name.includes(q)&&!sym.includes(q))return false;
+  if(q&&!name.includes(q)&&!sym.includes(q)&&!String(t.token_ca||"").toLowerCase().includes(q))return false;
   if(tok&&key!==tok)return false;
   if(act&&type!==act)return false;
   if(sec&&(!ts(t)||now-ts(t)>sec*1000))return false;
@@ -381,21 +642,93 @@ function filtered(){
  })
 }
 
+
+function getTokenChange(list, index){
+  const current = list[index];
+  const currentPrice = n(current?.price);
+  if(!Number.isFinite(currentPrice) || currentPrice <= 0) return NaN;
+
+  const currentKey = String(
+    current?.token_ca || current?.symbol || current?.name || ""
+  ).toLowerCase();
+
+  for(let j=index+1;j<list.length;j++){
+    const previous = list[j];
+    const previousKey = String(
+      previous?.token_ca || previous?.symbol || previous?.name || ""
+    ).toLowerCase();
+
+    if(previousKey !== currentKey) continue;
+
+    const previousPrice = n(previous?.price);
+    if(!Number.isFinite(previousPrice) || previousPrice <= 0) return NaN;
+
+    return ((currentPrice - previousPrice) / previousPrice) * 100;
+  }
+
+  return NaN;
+}
+
 function render(){
  const list=filtered(),total=Math.max(1,Math.ceil(list.length/PAGE)),start=(page-1)*PAGE,rows=list.slice(start,start+PAGE);
  if(page>total)page=total;
  $("body").innerHTML=rows.length?rows.map((t,i)=>{
-  const buy=String(t.type||"").toLowerCase()==="buy",sp=n(t.price),usd=Number.isFinite(sp)&&Number.isFinite(shmUsd)?sp*shmUsd:NaN;
+  const buy = String(t.type || "").toLowerCase() === "buy";
+
+const sp = n(t.price);
+const change = getTokenChange(trades, start + i);
+const tokenKey = String(t.token_ca || t.symbol || t.ticker || t.name || "").toLowerCase();
+const mcap = Number.isFinite(n(t.marketCapUsd))
+  ? n(t.marketCapUsd)
+  : tokenMarketCaps.get(tokenKey);
+const apiUsd = n(t.priceUsd);
+
+const usd = apiUsd > 0
+  ? apiUsd
+  : (
+      Number.isFinite(sp) &&
+      Number.isFinite(shmUsd)
+        ? sp * shmUsd
+        : NaN
+    );
+
+console.log("USD DEBUG:", {
+  token: t.symbol || t.ticker || t.name,
+  priceSHM: sp,
+  shmUsd: shmUsd,
+  calculatedUSD: usd,
+  apiUsd: apiUsd
+});
   const name=t.name||t.ticker||t.symbol||"Unknown",sym=t.ticker||t.symbol||"";
-  return `<div class="row">
+  const tx=t.tx||"";
+  return `<div class="row" title="${esc(tx)}">
    <div>${start+i+1}</div>
-   <div class="token">${t.image_url?`<img class="logo" src="${esc(t.image_url)}" onerror="this.style.display='none'" alt="">`:""}
+   <div class="token">
+    ${t.image_url?`<img class="logo" src="${esc(t.image_url)}" onerror="this.style.display='none'" alt="">`:""}
     <div class="token-text"><strong>${esc(name)}</strong><span>${esc(sym)}</span></div>
+    <a class="buy-inline"
+       href="https://join.sikka.fun/0ty8uzq"
+       target="_blank"
+       rel="noopener noreferrer"
+       title="Buy ${esc(name)} on Sikka.fun">BUY ↗</a>
    </div>
    <div class="${buy?"buy":"sell"}">${buy?"🟢 BUY":"🔴 SELL"}</div>
-   <div class="usd">${Number.isFinite(usd)?"$"+price(usd):"—"}</div>
-   <div class="shm">${Number.isFinite(sp)?price(sp):"—"} SHM</div>
+
+   <div class="shm">${Number.isFinite(sp)?price(sp):""}${Number.isFinite(sp)?" SHM":""}</div>
+
    <div class="time">${esc(ist(t))}</div>
+
+   <div class="usd">${Number.isFinite(usd)?"$"+usdPrice(usd):""}</div>
+   <div class="${
+     Number.isFinite(change)
+       ? (change > 0 ? "change change-up" : change < 0 ? "change change-down" : "change change-flat")
+       : "change change-na"
+   }">${
+     Number.isFinite(change)
+       ? (change > 0 ? "▲ +" : change < 0 ? "▼ " : "→ ") + change.toFixed(2) + "%"
+       : "—"
+   }</div>
+   <div class="mcap">${marketCapPrice(mcap) || "—"}</div>
   </div>`
  }).join(""):'<div class="status">No matching trades.</div>';
  $("showing").textContent=`Showing ${list.length?start+1:0} - ${Math.min(start+PAGE,list.length)} of ${list.length} loaded trades`;
@@ -414,7 +747,28 @@ async function loadShantum(){
    fetch("/api/shm-price?_="+Date.now(),{cache:"no-store"})
   ]);
   const p=await a.json(),info=await b.json(),s=await c.json();
-  const ps=n(p.price),su=n(s.priceUsd),usd=ps*su,cur=n(info.currentSupply),max=n(info.maxSupply),pct=max>0?cur/max*100:0;
+
+  // Keep the left Shantum price synchronized with the latest chart candle.
+  // Existing /api/shantum-price remains the fallback if candle data is unavailable.
+  let ps=n(p.price);
+  try{
+   const candleRes=await fetch("/api/sikka-candles?timeframe=24h&limit=200&_="+Date.now(),{cache:"no-store"});
+   if(candleRes.ok){
+    const candleData=await candleRes.json();
+    if(candleData.success && Array.isArray(candleData.candles) && candleData.candles.length){
+     const latest=candleData.candles
+      .map(c=>({t:Number(c.t),c:Number(c.c)}))
+      .filter(x=>Number.isFinite(x.t)&&Number.isFinite(x.c)&&x.c>0)
+      .sort((x,y)=>x.t-y.t)
+      .pop();
+     if(latest) ps=latest.c;
+    }
+   }
+  }catch(e){
+   console.warn("Latest chart candle unavailable; using Shantum price fallback.",e);
+  }
+
+  const su=n(s.priceUsd),usd=ps*su,cur=n(info.currentSupply),max=n(info.maxSupply),pct=max>0?cur/max*100:0;
   $("shantumCard").innerHTML=`
    <div class="shantum-head">
     <div class="identity">
@@ -442,30 +796,79 @@ async function loadShantum(){
 
 async function loadChart(tf="24h"){
  try{
+  // Keep the existing timeframe buttons/UI. Map the UI ranges to Sikka-supported
+  // candle intervals; 7d/30d/all use 24h candles so the chart remains stable.
+  const requested = String(tf || "24h");
+  const apiTf = ["1m","5m","15m","30m","1h","4h","12h","24h"].includes(requested)
+    ? requested
+    : "24h";
+
   const [a,b]=await Promise.all([
-   fetch("/api/sikka-candles?timeframe="+encodeURIComponent(tf)+"&limit=200&_="+Date.now(),{cache:"no-store"}),
+   fetch("/api/sikka-candles?timeframe="+encodeURIComponent(apiTf)+"&limit=200&_="+Date.now(),{cache:"no-store"}),
    fetch("/api/shm-price?_="+Date.now(),{cache:"no-store"})
   ]);
-  const d=await a.json(),s=await b.json(),sp=n(s.priceUsd);
-  if(!d.success||!Array.isArray(d.candles)||!d.candles.length)throw new Error("No candle data");
-  if(!Number.isFinite(sp))throw new Error("SHM price unavailable");
-  if(chart)chart.remove();
+
+  const d=await a.json(),s=b.ok?await b.json():{},sp=n(s.priceUsd);
+
+  if(!d.success || !Array.isArray(d.candles) || !d.candles.length){
+    throw new Error("No candle data");
+  }
+  if(!Number.isFinite(sp) || sp<=0){
+    throw new Error("SHM price unavailable");
+  }
+
+  if(chart) chart.remove();
   $("chart").innerHTML="";
-  const pts=d.candles.map(c=>({time:Number(c.t),value:Number(c.c)*sp})).filter(x=>Number.isFinite(x.time)&&Number.isFinite(x.value)).sort((a,b)=>a.time-b.time);
+
+  const pts=d.candles
+    .map(c=>({
+      time:Number(c.t),
+      value:Number(c.c)*sp
+    }))
+    .filter(x=>Number.isFinite(x.time)&&Number.isFinite(x.value)&&x.value>0)
+    .sort((a,b)=>a.time-b.time);
+
+  if(!pts.length) throw new Error("No valid candle points");
+
   chart=LightweightCharts.createChart($("chart"),{
-   width:$("chart").clientWidth,height:330,
+   width:$("chart").clientWidth,
+   height:330,
    layout:{background:{color:"transparent"},textColor:"#91a9c4"},
-   grid:{vertLines:{color:"rgba(255,255,255,.05)"},horzLines:{color:"rgba(255,255,255,.05)"}},
-   timeScale:{timeVisible:true,borderColor:"rgba(255,255,255,.08)"}
+   grid:{
+    vertLines:{color:"rgba(255,255,255,.05)"},
+    horzLines:{color:"rgba(255,255,255,.05)"}
+   },
+   timeScale:{
+    timeVisible:true,
+    secondsVisible:false,
+    borderColor:"rgba(255,255,255,.08)"
+   },
+   rightPriceScale:{
+    borderColor:"rgba(255,255,255,.08)"
+   }
   });
+
   const series=chart.addSeries(LightweightCharts.BaselineSeries,{
    baseValue:{type:"price",price:pts[0].value},
-   topLineColor:"#18e39a",topFillColor1:"rgba(24,227,154,.28)",topFillColor2:"rgba(24,227,154,.03)",
-   bottomLineColor:"#ff4d6d",bottomFillColor1:"rgba(255,77,109,.03)",bottomFillColor2:"rgba(255,77,109,.20)",
-   priceFormat:{type:"price",precision:9,minMove:.000000001}
+   topLineColor:"#18e39a",
+   topFillColor1:"rgba(24,227,154,.28)",
+   topFillColor2:"rgba(24,227,154,.03)",
+   bottomLineColor:"#ff4d6d",
+   bottomFillColor1:"rgba(255,77,109,.03)",
+   bottomFillColor2:"rgba(255,77,109,.20)",
+   priceFormat:{
+    type:"price",
+    precision:9,
+    minMove:.000000001
+   }
   });
-  series.setData(pts);chart.timeScale().fitContent()
- }catch(e){$("chart").innerHTML='<div class="status error">Unable to load chart: '+esc(e.message)+'</div>'}
+
+  series.setData(pts);
+  chart.timeScale().fitContent();
+
+ }catch(e){
+  $("chart").innerHTML='<div class="status error">Unable to load chart: '+esc(e.message)+'</div>';
+ }
 }
 
 $("search").oninput=async()=>{
@@ -509,15 +912,11 @@ $("refresh").onclick=async()=>{
  }
 };
 $("chartButton").onclick=()=>$("shantum").scrollIntoView({behavior:"smooth"});
-document.querySelectorAll(".tf").forEach(b=>b.onclick=()=>{
- document.querySelectorAll(".tf").forEach(x=>x.classList.remove("active"));
- b.classList.add("active");loadChart(b.dataset.tf)
-});
 window.onresize=()=>{if(chart)chart.resize($("chart").clientWidth,330)}
 
 async function init(){
  updateDate();
- await Promise.all([loadTrades(true),loadShantum(),loadChart("24h")])
+ await Promise.all([loadTrades(true),loadShantum(),loadChart()])
 }
 init();
 setInterval(()=>{
@@ -525,6 +924,47 @@ setInterval(()=>{
  loadTrades(false);
  loadShantum();
 },20000);
+
+
+/* SHARDEUM GAS PRICE - ADDED AT THE VERY END */
+async function loadGasPrice(){
+  const gasPriceEl=document.getElementById("gasPrice");
+  const gasFeeEl=document.getElementById("gasFee");
+  const gasWeiEl=document.getElementById("gasWei");
+  const gasLiveEl=document.getElementById("gasLive");
+  if(!gasPriceEl || !gasFeeEl || !gasWeiEl) return;
+
+  try{
+    const response=await fetch("https://api.shardeum.org",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      cache:"no-store",
+      body:JSON.stringify({jsonrpc:"2.0",method:"eth_gasPrice",params:[],id:Date.now()})
+    });
+    const data=await response.json();
+    if(data.error || !data.result) throw new Error("Gas price unavailable");
+
+    const wei=BigInt(data.result);
+    const gweiNumber=Number(wei)/1e9;
+    const feeShm=Number(wei)*21000/1e18;
+
+    gasPriceEl.textContent=gweiNumber.toLocaleString("en-US",{maximumFractionDigits:9})+" Gwei";
+    gasFeeEl.textContent=feeShm.toLocaleString("en-US",{maximumFractionDigits:12})+" SHM";
+    gasWeiEl.textContent=wei.toString()+" wei";
+
+    gasLiveEl.textContent="● LIVE";
+    gasLiveEl.style.color="#18e39a";
+  }catch(error){
+    console.error("Gas price error:",error);
+    gasPriceEl.textContent="Unavailable";
+    gasFeeEl.textContent="—";
+    gasWeiEl.textContent="—";
+    gasLiveEl.textContent="● OFFLINE";
+    gasLiveEl.style.color="#ff4d6d";
+  }
+}
+loadGasPrice();
+setInterval(loadGasPrice,20000);
 </script>
 </body>
 </html>
