@@ -197,43 +197,6 @@ button,input,select{font:inherit}
 @keyframes shimmer{to{background-position:-200% 0}}
 .error{color:#ff6179!important}
 
-
-/* LIVE BLOCKCHAIN ACTIVITY */
-.blockchain-activity{
-  width:100%;margin-top:14px;border:1px solid #155083;border-radius:15px;
-  background:linear-gradient(145deg,#071a31,#031021);padding:18px;overflow:hidden
-}
-.blockchain-head{
-  display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px
-}
-.blockchain-title{font-size:22px;font-weight:900}
-.blockchain-live{color:#18e39a;font-size:12px;font-weight:900}
-.blockchain-table-wrap{overflow-x:auto;border:1px solid rgba(255,255,255,.06);border-radius:11px}
-.blockchain-table{min-width:760px}
-.blockchain-row{
-  display:grid;grid-template-columns:1.05fr 1fr 1.35fr 1.35fr 1.35fr;
-  align-items:center;min-height:48px;padding:0 12px;
-  border-top:1px solid rgba(255,255,255,.045)
-}
-.blockchain-head-row{
-  min-height:41px;background:#18283f;border:0;
-  color:#dcecff;font-size:10px;font-weight:900
-}
-.blockchain-cell{font-size:11px;white-space:nowrap}
-.blockchain-type{font-weight:900}
-.blockchain-type.transfer{color:#18e39a}
-.blockchain-type.contract{color:#168fff}
-.blockchain-block{color:#dcecff;font-weight:800}
-.blockchain-time{color:#9eb4cd}
-.blockchain-amount{color:#dcecff;font-weight:800}
-.blockchain-gas{color:#ffb52b;font-weight:800}
-.blockchain-status{padding:18px;text-align:center;color:#91a9c4;font-size:12px}
-@media(max-width:700px){
-  .blockchain-activity{padding:12px}
-  .blockchain-title{font-size:19px}
-  .blockchain-table{min-width:700px}
-}
-
 /* LOWER: SHANTUM + CHART */
 .lower{
   display:grid;grid-template-columns:.9fr 1.1fr;gap:14px;margin-top:14px
@@ -300,6 +263,116 @@ button,input,select{font:inherit}
   .bottom{flex-direction:column;align-items:flex-start;gap:8px}
 }
 
+/* LIVE SHARDEUM BLOCKCHAIN ACTIVITY - VERCEL RPC API */
+const CHAIN_ROWS = 15;
+let chainRows = [];
+let chainLoading = false;
+
+function chainSetLive(live, text){
+  const el=$("chainLive");
+  const meta=$("chainMeta");
+  if(!el || !meta) return;
+  el.innerHTML=`<i class="dot"></i> ${live ? "LIVE" : "OFFLINE"}`;
+  el.style.color=live ? "#18e39a" : "#ff4d6d";
+  el.style.borderColor=live ? "rgba(24,227,154,.35)" : "rgba(255,77,109,.35)";
+  meta.textContent=text || (live ? "Auto updating from Shardeum RPC" : "Blockchain unavailable");
+}
+
+function renderChainRows(){
+  const body=$("chainBody");
+  if(!body) return;
+  if(!chainRows.length){
+    body.innerHTML='<div class="chain-status">Waiting for blockchain transactions...</div>';
+    return;
+  }
+  body.innerHTML=chainRows.slice(0,CHAIN_ROWS).map(r=>`
+    <div class="chain-row">
+      <div class="chain-cell chain-type">${esc(r.type)}</div>
+      <div class="chain-cell chain-block">${esc(String(r.block))}</div>
+      <div class="chain-cell chain-time">${esc(r.time)}</div>
+      <div class="chain-cell chain-amount">${esc(r.amount)} SHM</div>
+      <div class="chain-cell chain-gas">${esc(r.gas)} SHM</div>
+    </div>`).join("");
+}
+
+async function loadBlockchainActivity(){
+  if(chainLoading) return;
+  chainLoading=true;
+
+  const body=$("chainBody");
+  const hadRows=chainRows.length>0;
+
+  // Do not replace existing rows with a loading message during refresh.
+  // Only show loading on the very first request.
+  if(!hadRows && body){
+    body.innerHTML='<div class="chain-status">Loading blockchain activity...</div>';
+  }
+
+  try{
+    const controller=new AbortController();
+    const timeout=setTimeout(()=>controller.abort(),10000);
+
+    const response=await fetch("/api/blockchain-activity?_="+Date.now(),{
+      method:"GET",
+      cache:"no-store",
+      headers:{"Accept":"application/json"},
+      signal:controller.signal
+    });
+
+    clearTimeout(timeout);
+
+    const data=await response.json();
+
+    if(!response.ok || !data.success){
+      throw new Error(data.error || "Blockchain API error");
+    }
+
+    chainRows=Array.isArray(data.activities)
+      ? data.activities.slice(0,CHAIN_ROWS)
+      : [];
+
+    renderChainRows();
+
+    const count=chainRows.length;
+    const updated=data.updatedAt ? new Date(data.updatedAt) : new Date();
+    const updatedText=Number.isNaN(updated.getTime())
+      ? ""
+      : " • Updated "+updated.toLocaleTimeString("en-IN",{
+          timeZone:"Asia/Kolkata",
+          hour:"2-digit",
+          minute:"2-digit",
+          second:"2-digit",
+          hour12:true
+        })+" IST";
+
+    chainSetLive(
+      true,
+      count
+        ? `${count} transactions • Auto updating${updatedText}`
+        : "No recent transactions • Auto updating"
+    );
+
+  }catch(e){
+    console.error("Blockchain activity error:",e);
+
+    // Keep already loaded data visible if refresh temporarily fails.
+    if(!hadRows && body){
+      body.innerHTML='<div class="chain-status error">Unable to load Shardeum blockchain activity. Retrying...</div>';
+    }
+
+    if(hadRows){
+      chainSetLive(true,"Live data shown • retrying update");
+    }else{
+      chainSetLive(false,"Unable to connect • retrying automatically");
+    }
+  }finally{
+    chainLoading=false;
+  }
+}
+
+loadBlockchainActivity();
+setInterval(loadBlockchainActivity,20000);
+
 /* SHARDEUM GAS PRICE - ADDED AT THE VERY END */
 .gas-card{width:100%;margin-top:14px;border:1px solid #155083;border-radius:15px;background:linear-gradient(145deg,#071a31,#031021);padding:18px}
 .gas-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
@@ -311,6 +384,31 @@ button,input,select{font:inherit}
 .gas-box strong{display:block;font-size:22px;line-height:1.35;word-break:break-word}
 @media(max-width:700px){.gas-grid{grid-template-columns:1fr}.gas-title{font-size:19px}.gas-box strong{font-size:20px}}
 
+
+/* LIVE BLOCKCHAIN ACTIVITY */
+.chain-card{width:100%;margin-top:14px;border:1px solid #155083;border-radius:15px;background:linear-gradient(145deg,#071a31,#031021);padding:18px}
+.chain-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+.chain-title{display:flex;align-items:center;gap:10px;min-width:0}
+.chain-title h2{font-size:22px;font-weight:900;margin:0}
+.chain-live{display:flex;align-items:center;gap:7px;color:#18e39a;background:rgba(24,227,154,.08);border:1px solid rgba(24,227,154,.35);border-radius:18px;padding:6px 11px;font-size:11px;font-weight:800;white-space:nowrap}
+.chain-meta{color:#91a9c4;font-size:10px;text-align:right}
+.chain-table-wrap{overflow-x:auto;border-radius:11px;border:1px solid rgba(255,255,255,.06)}
+.chain-table{min-width:700px}
+.chain-row{display:grid;grid-template-columns:1fr 1fr 1.35fr 1.35fr 1.35fr;align-items:center;min-height:48px;padding:0 11px;border-top:1px solid rgba(255,255,255,.045)}
+.chain-row.head{min-height:41px;background:#18283f;border:0;color:#dcecff;font-size:10px;font-weight:900}
+.chain-cell{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chain-type{font-weight:900;color:#18e39a}
+.chain-block{color:#dcecff;font-weight:800}
+.chain-time{color:#9eb4cd}
+.chain-amount{color:#dcecff;font-weight:800}
+.chain-gas{color:#9eb6d0}
+.chain-status{padding:22px;text-align:center;color:#91a9c4;font-size:12px}
+@media(max-width:700px){
+  .chain-card{padding:12px}
+  .chain-head{align-items:flex-start;flex-direction:column}
+  .chain-meta{text-align:left}
+  .chain-title h2{font-size:19px}
+}
 </style>
 </head>
 
@@ -402,25 +500,20 @@ button,input,select{font:inherit}
   </div>
 </section>
 
-
-<section id="blockchain-activity" class="blockchain-activity">
-  <div class="blockchain-head">
-    <div class="blockchain-title">⛓️ Live Blockchain Activity</div>
-    <div id="blockchainLive" class="blockchain-live">● LIVE</div>
+<section class="chain-card" id="blockchain-activity">
+  <div class="chain-head">
+    <div class="chain-title">
+      <h2>⛓️ Live Blockchain Activity</h2>
+      <span id="chainLive" class="chain-live"><i class="dot"></i> LIVE</span>
+    </div>
+    <div id="chainMeta" class="chain-meta">Loading Shardeum blockchain activity...</div>
   </div>
-
-  <div class="blockchain-table-wrap">
-    <div class="blockchain-table">
-      <div class="blockchain-row blockchain-head-row">
-        <div>TYPE</div>
-        <div>BLOCK</div>
-        <div>TIME</div>
-        <div>AMOUNT (SHM)</div>
-        <div>GAS FEE (SHM)</div>
+  <div class="chain-table-wrap">
+    <div class="chain-table">
+      <div class="chain-row head">
+        <div>TYPE</div><div>BLOCK</div><div>TIME</div><div>AMOUNT (SHM)</div><div>GAS FEE (SHM)</div>
       </div>
-      <div id="blockchainBody">
-        <div class="blockchain-status">Loading blockchain activity...</div>
-      </div>
+      <div id="chainBody"><div class="chain-status">Loading blockchain activity...</div></div>
     </div>
   </div>
 </section>
