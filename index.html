@@ -263,116 +263,6 @@ button,input,select{font:inherit}
   .bottom{flex-direction:column;align-items:flex-start;gap:8px}
 }
 
-/* LIVE SHARDEUM BLOCKCHAIN ACTIVITY - VERCEL RPC API */
-const CHAIN_ROWS = 15;
-let chainRows = [];
-let chainLoading = false;
-
-function chainSetLive(live, text){
-  const el=$("chainLive");
-  const meta=$("chainMeta");
-  if(!el || !meta) return;
-  el.innerHTML=`<i class="dot"></i> ${live ? "LIVE" : "OFFLINE"}`;
-  el.style.color=live ? "#18e39a" : "#ff4d6d";
-  el.style.borderColor=live ? "rgba(24,227,154,.35)" : "rgba(255,77,109,.35)";
-  meta.textContent=text || (live ? "Auto updating from Shardeum RPC" : "Blockchain unavailable");
-}
-
-function renderChainRows(){
-  const body=$("chainBody");
-  if(!body) return;
-  if(!chainRows.length){
-    body.innerHTML='<div class="chain-status">Waiting for blockchain transactions...</div>';
-    return;
-  }
-  body.innerHTML=chainRows.slice(0,CHAIN_ROWS).map(r=>`
-    <div class="chain-row">
-      <div class="chain-cell chain-type">${esc(r.type)}</div>
-      <div class="chain-cell chain-block">${esc(String(r.block))}</div>
-      <div class="chain-cell chain-time">${esc(r.time)}</div>
-      <div class="chain-cell chain-amount">${esc(r.amount)} SHM</div>
-      <div class="chain-cell chain-gas">${esc(r.gas)} SHM</div>
-    </div>`).join("");
-}
-
-async function loadBlockchainActivity(){
-  if(chainLoading) return;
-  chainLoading=true;
-
-  const body=$("chainBody");
-  const hadRows=chainRows.length>0;
-
-  // Do not replace existing rows with a loading message during refresh.
-  // Only show loading on the very first request.
-  if(!hadRows && body){
-    body.innerHTML='<div class="chain-status">Loading blockchain activity...</div>';
-  }
-
-  try{
-    const controller=new AbortController();
-    const timeout=setTimeout(()=>controller.abort(),10000);
-
-    const response=await fetch("/api/blockchain-activity?_="+Date.now(),{
-      method:"GET",
-      cache:"no-store",
-      headers:{"Accept":"application/json"},
-      signal:controller.signal
-    });
-
-    clearTimeout(timeout);
-
-    const data=await response.json();
-
-    if(!response.ok || !data.success){
-      throw new Error(data.error || "Blockchain API error");
-    }
-
-    chainRows=Array.isArray(data.activities)
-      ? data.activities.slice(0,CHAIN_ROWS)
-      : [];
-
-    renderChainRows();
-
-    const count=chainRows.length;
-    const updated=data.updatedAt ? new Date(data.updatedAt) : new Date();
-    const updatedText=Number.isNaN(updated.getTime())
-      ? ""
-      : " • Updated "+updated.toLocaleTimeString("en-IN",{
-          timeZone:"Asia/Kolkata",
-          hour:"2-digit",
-          minute:"2-digit",
-          second:"2-digit",
-          hour12:true
-        })+" IST";
-
-    chainSetLive(
-      true,
-      count
-        ? `${count} transactions • Auto updating${updatedText}`
-        : "No recent transactions • Auto updating"
-    );
-
-  }catch(e){
-    console.error("Blockchain activity error:",e);
-
-    // Keep already loaded data visible if refresh temporarily fails.
-    if(!hadRows && body){
-      body.innerHTML='<div class="chain-status error">Unable to load Shardeum blockchain activity. Retrying...</div>';
-    }
-
-    if(hadRows){
-      chainSetLive(true,"Live data shown • retrying update");
-    }else{
-      chainSetLive(false,"Unable to connect • retrying automatically");
-    }
-  }finally{
-    chainLoading=false;
-  }
-}
-
-loadBlockchainActivity();
-setInterval(loadBlockchainActivity,20000);
-
 /* SHARDEUM GAS PRICE - ADDED AT THE VERY END */
 .gas-card{width:100%;margin-top:14px;border:1px solid #155083;border-radius:15px;background:linear-gradient(145deg,#071a31,#031021);padding:18px}
 .gas-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
@@ -964,6 +854,82 @@ $("refresh").onclick=async()=>{
 };
 $("chartButton").onclick=()=>$("shantum").scrollIntoView({behavior:"smooth"});
 window.onresize=()=>{if(chart)chart.resize($("chart").clientWidth,330)}
+
+
+/* LIVE SHARDEUM BLOCKCHAIN ACTIVITY */
+const CHAIN_ROWS = 15;
+let chainRows = [];
+let chainLoading = false;
+
+function chainSetLive(live, text){
+  const el=$("chainLive"), meta=$("chainMeta");
+  if(!el || !meta) return;
+  el.innerHTML=`<i class="dot"></i> ${live ? "LIVE" : "OFFLINE"}`;
+  el.style.color=live ? "#18e39a" : "#ff4d6d";
+  el.style.borderColor=live ? "rgba(24,227,154,.35)" : "rgba(255,77,109,.35)";
+  meta.textContent=text || (live ? "Auto updating from Shardeum" : "Blockchain unavailable");
+}
+
+function renderChainRows(){
+  const body=$("chainBody");
+  if(!body) return;
+  if(!chainRows.length){
+    body.innerHTML='<div class="chain-status">No recent blockchain activity found.</div>';
+    return;
+  }
+  body.innerHTML=chainRows.slice(0,CHAIN_ROWS).map(r=>`
+    <div class="chain-row">
+      <div class="chain-cell chain-type">${esc(r.type || "TRANSFER")}</div>
+      <div class="chain-cell chain-block">${Number(r.block||0).toLocaleString("en-US")}</div>
+      <div class="chain-cell chain-time">${esc(r.time ? new Date(r.time).toLocaleString("en-IN",{timeZone:"Asia/Kolkata",day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:true})+" IST" : "—")}</div>
+      <div class="chain-cell chain-amount">${esc(String(r.amountShm ?? r.amount ?? "0"))} SHM</div>
+      <div class="chain-cell chain-gas">${esc(String(r.gasFeeShm ?? r.gas ?? "0"))} SHM</div>
+    </div>`).join("");
+}
+
+async function loadBlockchainActivity(){
+  if(chainLoading) return;
+  chainLoading=true;
+  const body=$("chainBody");
+  const hadRows=chainRows.length>0;
+
+  try{
+    const controller=new AbortController();
+    const timeout=setTimeout(()=>controller.abort(),10000);
+    const response=await fetch("/api/blockchain-activity?_="+Date.now(),{
+      method:"GET",cache:"no-store",headers:{"Accept":"application/json"},signal:controller.signal
+    });
+    clearTimeout(timeout);
+
+    const text=await response.text();
+    let data;
+    try{ data=JSON.parse(text); }
+    catch{ throw new Error("Blockchain API returned invalid JSON"); }
+
+    if(!response.ok || !data.success) throw new Error(data.error || "Blockchain API error");
+
+    chainRows=Array.isArray(data.activities) ? data.activities : [];
+    renderChainRows();
+
+    const count=chainRows.length;
+    const updated=data.updatedAt ? new Date(data.updatedAt) : new Date();
+    const updatedText=Number.isNaN(updated.getTime()) ? "" :
+      " • Updated "+updated.toLocaleTimeString("en-IN",{
+        timeZone:"Asia/Kolkata",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:true
+      })+" IST";
+
+    chainSetLive(true,count ? `${count} transactions • Auto updating${updatedText}` : "No recent transactions • Auto updating");
+  }catch(e){
+    console.error("Blockchain activity error:",e);
+    if(!hadRows && body) body.innerHTML='<div class="chain-status error">Unable to load blockchain activity. Retrying...</div>';
+    chainSetLive(hadRows,hadRows ? "Last data shown • retrying update" : "Unable to connect • retrying automatically");
+  }finally{
+    chainLoading=false;
+  }
+}
+
+loadBlockchainActivity();
+setInterval(loadBlockchainActivity,20000);
 
 async function init(){
  updateDate();
