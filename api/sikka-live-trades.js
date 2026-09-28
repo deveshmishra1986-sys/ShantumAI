@@ -1,178 +1,20 @@
 // ==================================================
-// SIKKA LIVE TRADES
-//
-// SOURCE:
-// 1. /tokens/lists?type=trending
-// 2. /tokens/{token_ca}/trades
+// SIKKA LIVE TRADES API
 // ==================================================
 
 const SIKKA_BASE_URL =
   "https://api.sikka.fun/api/v1";
 
-const TRENDING_LIMIT = 20;
-const TRADES_LIMIT = 100;
+const MAX_TOKENS =
+  50;
+
+const TRADES_LIMIT =
+  1000;
 
 
-// ==================================================
-// HELPERS
-// ==================================================
-
-function firstValidNumber(...values) {
-
-  for (const value of values) {
-
-    if (
-      value !== null &&
-      value !== undefined &&
-      value !== ""
-    ) {
-
-      const num = Number(value);
-
-      if (
-        Number.isFinite(num) &&
-        num > 0
-      ) {
-        return num;
-      }
-    }
-  }
-
-  return null;
-}
-
-
-// ==================================================
-// MARKET CAP
-//
-// Sikka market_cap is in SHM.
-// Convert it to USD using SHM/USD.
-// ==================================================
-
-function getMarketCapUsd(
-  token,
-  shmUsd
-) {
-
-  const marketCapShm =
-    firstValidNumber(
-      token?.market_cap,
-      token?.marketCap
-    );
-
-  if (
-    marketCapShm === null
-  ) {
-    return null;
-  }
-
-  if (
-    !Number.isFinite(shmUsd) ||
-    shmUsd <= 0
-  ) {
-    return null;
-  }
-
-  return marketCapShm * shmUsd;
-}
-
-
-// ==================================================
-// NORMALIZE TOKEN
-// ==================================================
-
-function normalizeToken(
-  token,
-  shmUsd
-) {
-
-  const tokenAddress =
-    token?.token_ca ||
-    token?.contract ||
-    token?.address ||
-    "";
-
-  const name =
-    token?.name ||
-    "";
-
-  const ticker =
-    token?.ticker ||
-    token?.symbol ||
-    "";
-
-  const symbol =
-    token?.symbol ||
-    token?.ticker ||
-    "";
-
-  const marketCapShm =
-    firstValidNumber(
-      token?.market_cap,
-      token?.marketCap
-    );
-
-  const marketCapUsd =
-    getMarketCapUsd(
-      token,
-      shmUsd
-    );
-
-
-  return {
-
-    token_ca:
-      tokenAddress,
-
-    name,
-
-    ticker,
-
-    symbol,
-
-    image_url:
-      token?.image_url ||
-      "",
-
-    current_price:
-      token?.current_price ??
-      token?.price ??
-      "",
-
-    // Original Sikka MCAP
-    // This value is in SHM.
-    market_cap:
-      marketCapShm !== null
-        ? marketCapShm
-        : "",
-
-    // New USD MCAP
-    marketCapUsd:
-      marketCapUsd !== null
-        ? marketCapUsd
-        : null,
-
-    volume_24h:
-      token?.volume_24h ??
-      token?.volume24h ??
-      "",
-
-    holders_count:
-      token?.holders_count ??
-      token?.holdersCount ??
-      "",
-
-    created_at:
-      token?.created_at ??
-      token?.createdAt ??
-      ""
-  };
-}
-
-
-// ==================================================
+// --------------------------------------------------
 // MAIN HANDLER
-// ==================================================
+// --------------------------------------------------
 
 export default async function handler(
   req,
@@ -181,256 +23,265 @@ export default async function handler(
 
   try {
 
-    // ------------------------------------------------
-    // 1. GET SHM/USD PRICE
-    //
-    // CoinGecko first.
-    // Gate fallback.
-    // ------------------------------------------------
-
     const shmUsd =
       await getShmUsd();
 
-
-    // ------------------------------------------------
-    // 2. GET TRENDING TOKENS
-    // ------------------------------------------------
-
-    const trendingResponse =
+    const moversResponse =
       await fetch(
-
-        `${SIKKA_BASE_URL}/tokens/lists?type=trending&limit=${TRENDING_LIMIT}`,
-
+        `${SIKKA_BASE_URL}/tokens/movers`,
         {
           cache: "no-store",
-
           headers: {
             Accept:
               "application/json"
           }
         }
-
       );
 
 
     if (
-      !trendingResponse.ok
+      !moversResponse.ok
     ) {
 
       throw new Error(
-        `Trending API HTTP ${trendingResponse.status}`
+        `Movers API HTTP ${moversResponse.status}`
       );
 
     }
 
 
-    const trendingResult =
-      await trendingResponse.json();
+    const moversResult =
+      await moversResponse.json();
 
 
-    const trendingTokens =
+    const movers =
       Array.isArray(
-        trendingResult?.data?.tokens
+        moversResult?.data?.movers
       )
-        ? trendingResult.data.tokens
+        ? moversResult.data.movers
         : [];
 
 
-    // ------------------------------------------------
-    // NO TRENDING TOKENS
-    // ------------------------------------------------
+    const activeTokens =
+      movers
+        .filter(
+          token =>
+            token &&
+            (
+              token.token_ca ||
+              token.contract ||
+              token.address
+            )
+        )
+        .slice(
+          0,
+          MAX_TOKENS
+        );
+
 
     if (
-      !trendingTokens.length
+      !activeTokens.length
     ) {
 
-      return res.status(200).json({
+      return res.status(
+        200
+      ).json({
 
-        success: true,
+        success:
+          true,
 
         date:
           new Date().toISOString(),
 
-        shmUsd:
-          Number.isFinite(shmUsd)
-            ? shmUsd
-            : null,
-
-        totalTrendingTokens:
-          0,
-
         totalTradeCount:
           0,
 
-        tokens: [],
+        tokens:
+          [],
 
-        trades: []
+        trades:
+          []
 
       });
 
     }
 
 
-    // ------------------------------------------------
-    // 3. GET RECENT TRADES
-    // ------------------------------------------------
+    // --------------------------------------------------
+    // LOAD TOKEN DETAILS + TRADES
+    // --------------------------------------------------
 
     const results =
       await Promise.all(
 
-        trendingTokens.map(
-          async (token) => {
+        activeTokens.map(
+          async token => {
 
             const tokenAddress =
-              token?.token_ca ||
-              token?.contract ||
-              token?.address;
+              token.token_ca ||
+              token.contract ||
+              token.address;
 
 
-            if (
-              !tokenAddress
-            ) {
+            let tokenInfo =
+              token;
 
-              return {
+            let trades =
+              [];
 
-                token,
 
-                trades: []
-
-              };
-
-            }
-
+            // ------------------------------------------
+            // TOKEN DETAILS
+            // ------------------------------------------
 
             try {
 
-              const tradesResponse =
+              const tokenResponse =
                 await fetch(
-
-                  `${SIKKA_BASE_URL}/tokens/${tokenAddress}/trades?limit=${TRADES_LIMIT}`,
-
+                  `${SIKKA_BASE_URL}/tokens/${tokenAddress}`,
                   {
                     cache:
                       "no-store",
-
                     headers: {
                       Accept:
                         "application/json"
                     }
                   }
-
                 );
 
 
               if (
-                !tradesResponse.ok
+                tokenResponse.ok
               ) {
 
-                console.warn(
-
-                  `Trades API failed for ${tokenAddress}: HTTP ${tradesResponse.status}`
-
-                );
+                const tokenResult =
+                  await tokenResponse.json();
 
 
-                return {
-
-                  token,
-
-                  trades: []
-
-                };
+                tokenInfo =
+                  extractToken(
+                    tokenResult
+                  ) ||
+                  token;
 
               }
-
-
-              const tradesResult =
-                await tradesResponse.json();
-
-
-              const tokenTrades =
-                Array.isArray(
-                  tradesResult?.data
-                )
-                  ? tradesResult.data
-                  : [];
-
-
-              // ------------------------------------------------
-              // ADD TOKEN INFORMATION TO EACH TRADE
-              // ------------------------------------------------
-
-              const normalizedTrades =
-                tokenTrades.map(
-                  (trade) => ({
-
-                    ...trade,
-
-                    token_ca:
-                      token?.token_ca ||
-                      token?.contract ||
-                      token?.address ||
-                      "",
-
-                    name:
-                      token?.name ||
-                      "",
-
-                    ticker:
-                      token?.ticker ||
-                      token?.symbol ||
-                      "",
-
-                    symbol:
-                      token?.symbol ||
-                      token?.ticker ||
-                      "",
-
-                    image_url:
-                      token?.image_url ||
-                      "",
-
-                    // Keep original trade price.
-                    // Frontend already handles USD.
-                    priceUsd:
-                      null
-
-                  })
-                );
-
-
-              return {
-
-                token,
-
-                trades:
-                  normalizedTrades
-
-              };
-
 
             }
 
             catch (error) {
 
               console.error(
+                `Token info error for ${tokenAddress}:`,
+                error
+              );
 
-                `Trade fetch error for ${tokenAddress}:`,
+            }
 
-                error?.message
 
+            // ------------------------------------------
+            // TRADES
+            // ------------------------------------------
+
+            try {
+
+              const tradeResponse =
+                await fetch(
+                  `${SIKKA_BASE_URL}/tokens/${tokenAddress}/trades?limit=${TRADES_LIMIT}`,
+                  {
+                    cache:
+                      "no-store",
+                    headers: {
+                      Accept:
+                        "application/json"
+                    }
+                  }
+                );
+
+
+              if (
+                tradeResponse.ok
+              ) {
+
+                const tradeResult =
+                  await tradeResponse.json();
+
+
+                trades =
+                  extractTrades(
+                    tradeResult
+                  );
+
+              }
+
+            }
+
+            catch (error) {
+
+              console.error(
+                `Trade error for ${tokenAddress}:`,
+                error
+              );
+
+            }
+
+
+            const normalizedToken =
+              normalizeToken(
+                tokenInfo,
+                token,
+                shmUsd
               );
 
 
-              return {
+            const normalizedTrades =
+              trades
+                .map(
+                  trade =>
+                    normalizeTrade(
+                      trade,
+                      normalizedToken
+                    )
+                )
+                .filter(
+                  trade =>
+                    trade.timestamp > 0
+                );
 
-                token,
 
-                trades: []
+            /*
+             * Prefer a token-level all-time
+             * trade count when Sikka supplies it.
+             * Otherwise use the number of trades
+             * returned by the public endpoint.
+             */
 
-              };
+            const tokenTradeCount =
+              firstFiniteNumber(
+                tokenInfo.total_trades,
+                tokenInfo.totalTrades,
+                tokenInfo.trade_count,
+                tokenInfo.tradeCount,
+                tokenInfo.trades_count,
+                tokenInfo.tradesCount
+              );
 
-            }
+
+            return {
+
+              token:
+                normalizedToken,
+
+              trades:
+                normalizedTrades,
+
+              totalTrades:
+                Number.isFinite(
+                  tokenTradeCount
+                )
+                  ? tokenTradeCount
+                  : normalizedTrades.length
+
+            };
 
           }
         )
@@ -438,132 +289,124 @@ export default async function handler(
       );
 
 
-    // ------------------------------------------------
-    // 4. COMBINE ALL TRADES
-    // ------------------------------------------------
+    // --------------------------------------------------
+    // FLATTEN
+    // --------------------------------------------------
 
-    const allTrades = [];
+    const tokens =
+      results
+        .map(
+          result => ({
+            ...result.token,
 
+            totalTrades:
+              result.totalTrades,
 
-    results.forEach(
-      (result) => {
-
-        if (
-          !Array.isArray(
-            result?.trades
-          )
-        ) {
-
-          return;
-
-        }
-
-
-        result.trades.forEach(
-          (trade) => {
-
-            allTrades.push(
-              trade
-            );
-
-          }
+            volumeUsd:
+              calculateTokenVolume(
+                result
+              )
+          })
         );
 
-      }
-    );
 
-
-    // ------------------------------------------------
-    // 5. SORT LATEST TRADE FIRST
-    // ------------------------------------------------
-
-    allTrades.sort(
-      (a, b) => {
-
-        const timeA =
-          Number(
-            a?.t || 0
-          );
-
-        const timeB =
-          Number(
-            b?.t || 0
-          );
-
-        return (
-          timeB - timeA
+    const allTrades =
+      results
+        .flatMap(
+          result =>
+            result.trades
+        )
+        .sort(
+          (a, b) =>
+            Number(
+              b.timestamp
+            ) -
+            Number(
+              a.timestamp
+            )
         );
 
-      }
-    );
 
+    /*
+     * Sum token-level counts where available.
+     * This is more useful than simply counting
+     * the visible rows.
+     */
 
-    // ------------------------------------------------
-    // 6. NORMALIZE TOKENS
-    // ------------------------------------------------
-
-    const normalizedTokens =
-      trendingTokens.map(
-        (token) =>
-          normalizeToken(
-            token,
-            shmUsd
-          )
+    const totalTradeCount =
+      results.reduce(
+        (
+          total,
+          result
+        ) =>
+          total +
+          (
+            Number.isFinite(
+              Number(
+                result.totalTrades
+              )
+            )
+              ? Number(
+                  result.totalTrades
+                )
+              : result.trades.length
+          ),
+        0
       );
 
 
-    // ------------------------------------------------
-    // 7. RETURN DATA
-    // ------------------------------------------------
+    return res.status(
+      200
+    ).json({
 
-    return res.status(200).json({
+      success:
+        true,
 
-      success: true,
-
-      date:
+      checkedAt:
         new Date().toISOString(),
 
-      // Current SHM/USD
-      shmUsd:
-        Number.isFinite(shmUsd)
-          ? shmUsd
-          : null,
-
-      totalTrendingTokens:
-        trendingTokens.length,
+      tokenCount:
+        tokens.length,
 
       totalTradeCount:
-        allTrades.length,
+        totalTradeCount,
+
+      /*
+       * If the public endpoint returns
+       * paginated/limited history, this is
+       * the history available from that endpoint.
+       */
+
+      historyNote:
+        "Trades returned by the public Sikka token trade endpoints.",
 
       tokens:
-        normalizedTokens,
+        tokens,
 
       trades:
         allTrades
 
     });
 
-
   }
 
   catch (error) {
 
     console.error(
-
-      "SIKKA TRENDING/TRADES ERROR:",
-
+      "Sikka live trades error:",
       error
-
     );
 
 
-    return res.status(500).json({
+    return res.status(
+      500
+    ).json({
 
-      success: false,
+      success:
+        false,
 
       error:
-        error?.message ||
-        "Unable to load Sikka trending tokens"
+        error.message
 
     });
 
@@ -573,151 +416,580 @@ export default async function handler(
 
 
 // ==================================================
-// SHM/USD PRICE
+// HELPERS
 // ==================================================
+
+function extractToken(
+  result
+) {
+
+  if (
+    result?.data?.token
+  ) {
+
+    return result.data.token;
+
+  }
+
+  if (
+    result?.data &&
+    !Array.isArray(
+      result.data
+    )
+  ) {
+
+    return result.data;
+
+  }
+
+  if (
+    result?.token
+  ) {
+
+    return result.token;
+
+  }
+
+  return null;
+
+}
+
+
+function extractTrades(
+  result
+) {
+
+  if (
+    Array.isArray(
+      result?.data
+    )
+  ) {
+
+    return result.data;
+
+  }
+
+  if (
+    Array.isArray(
+      result?.data?.data
+    )
+  ) {
+
+    return result.data.data;
+
+  }
+
+  if (
+    Array.isArray(
+      result?.trades
+    )
+  ) {
+
+    return result.trades;
+
+  }
+
+  if (
+    Array.isArray(
+      result?.data?.trades
+    )
+  ) {
+
+    return result.data.trades;
+
+  }
+
+  return [];
+
+}
+
+
+function normalizeToken(
+  token,
+  fallback,
+  shmUsd
+) {
+
+  const source =
+    token || fallback || {};
+
+
+  let marketCapUsd =
+    firstFiniteNumber(
+      source.market_cap_usd,
+      source.marketCapUsd,
+      source.market_cap_usd_value,
+      source.marketCapUSD
+    );
+
+  /*
+   * Some token APIs expose market cap without
+   * a currency suffix. Use it only when the
+   * API explicitly says USD, or when a USD
+   * price + supply lets us calculate it.
+   */
+
+  const marketCapCurrency =
+    String(
+      source.market_cap_currency ||
+      source.marketCapCurrency ||
+      source.market_cap_currency_code ||
+      ""
+    ).toUpperCase();
+
+  if (
+    !Number.isFinite(marketCapUsd) &&
+    (
+      marketCapCurrency === "USD" ||
+      marketCapCurrency === "$"
+    )
+  ) {
+    marketCapUsd =
+      firstFiniteNumber(
+        source.market_cap,
+        source.marketCap
+      );
+  }
+
+  if (
+    !Number.isFinite(marketCapUsd)
+  ) {
+
+    const priceShm =
+      firstFiniteNumber(
+        source.price,
+        source.price_shm,
+        source.priceShm
+      );
+
+    const priceUsd =
+      firstFiniteNumber(
+        source.price_usd,
+        source.priceUsd,
+        source.usd_price,
+        source.usdPrice
+      );
+
+    const supply =
+      firstFiniteNumber(
+        source.circulating_supply,
+        source.circulatingSupply,
+        source.current_supply,
+        source.currentSupply,
+        source.total_supply,
+        source.totalSupply,
+        source.supply
+      );
+
+    let tokenPriceUsd =
+      priceUsd;
+
+    if (
+      !Number.isFinite(tokenPriceUsd) &&
+      Number.isFinite(priceShm) &&
+      Number.isFinite(shmUsd)
+    ) {
+      tokenPriceUsd =
+        priceShm * shmUsd;
+    }
+
+    if (
+      Number.isFinite(tokenPriceUsd) &&
+      Number.isFinite(supply)
+    ) {
+      marketCapUsd =
+        tokenPriceUsd * supply;
+    }
+  }
+
+
+  return {
+
+    token_ca:
+      source.token_ca ||
+      source.contract ||
+      source.address ||
+      fallback.token_ca ||
+      fallback.contract ||
+      fallback.address ||
+      "",
+
+    name:
+      source.name ||
+      fallback.name ||
+      "Unknown",
+
+    ticker:
+      source.ticker ||
+      source.symbol ||
+      fallback.ticker ||
+      fallback.symbol ||
+      "",
+
+    image_url:
+      source.image_url ||
+      source.image ||
+      source.logo ||
+      fallback.image_url ||
+      fallback.image ||
+      "",
+
+    marketCapUsd:
+      Number.isFinite(
+        marketCapUsd
+      )
+        ? marketCapUsd
+        : null
+
+  };
+
+}
+
+
+function normalizeTrade(
+  trade,
+  token,
+  shmUsd
+) {
+
+  const timestamp =
+    getTimestamp(
+      trade
+    );
+
+
+  const price =
+    firstFiniteNumber(
+      trade.price,
+      trade.price_shm,
+      trade.priceShm
+    );
+
+
+  let priceUsd =
+    firstFiniteNumber(
+      trade.price_usd,
+      trade.priceUsd,
+      trade.usd_price,
+      trade.usdPrice
+    );
+
+  if (
+    !Number.isFinite(priceUsd) &&
+    Number.isFinite(price) &&
+    Number.isFinite(shmUsd)
+  ) {
+    priceUsd =
+      price * shmUsd;
+  }
+
+
+  let volumeUsd =
+    firstFiniteNumber(
+      trade.volume_usd,
+      trade.volumeUsd,
+      trade.usd_volume,
+      trade.usdVolume,
+      trade.trade_value_usd,
+      trade.tradeValueUsd,
+      trade.value_usd,
+      trade.valueUsd
+    );
+
+
+  // Sikka trade API fields:
+  // user = trader wallet, shm = SHM spent/received, amt = token amount.
+  const volumeShm =
+    firstFiniteNumber(
+      trade.shm,
+      trade.volume,
+      trade.amount,
+      trade.shm_amount,
+      trade.shmAmount,
+      trade.amount_shm,
+      trade.amountShm
+    );
+
+  const tokenAmount =
+    firstFiniteNumber(
+      trade.amt,
+      trade.quantity,
+      trade.token_amount,
+      trade.tokenAmount,
+      trade.amount_token,
+      trade.amountToken
+    );
+
+  if (
+    !Number.isFinite(volumeUsd) &&
+    Number.isFinite(volumeShm) &&
+    Number.isFinite(shmUsd)
+  ) {
+    volumeUsd =
+      volumeShm * shmUsd;
+  }
+
+
+  return {
+
+    token_ca:
+      token.token_ca,
+
+    name:
+      token.name,
+
+    ticker:
+      token.ticker,
+
+    image_url:
+      token.image_url,
+
+    type:
+      String(
+        trade.type ||
+        trade.side ||
+        ""
+      ).toLowerCase(),
+
+    price:
+      Number.isFinite(
+        price
+      )
+        ? price
+        : null,
+
+    priceUsd:
+      Number.isFinite(
+        priceUsd
+      )
+        ? priceUsd
+        : null,
+
+    volumeUsd:
+      Number.isFinite(
+        volumeUsd
+      )
+        ? volumeUsd
+        : null,
+
+    volumeShm:
+      Number.isFinite(
+        volumeShm
+      )
+        ? volumeShm
+        : null,
+
+    // Exact Sikka trade fields needed by the whale sentence UI.
+    user:
+      trade.user ||
+      trade.wallet ||
+      trade.trader ||
+      trade.from ||
+      "",
+
+    shm:
+      Number.isFinite(volumeShm)
+        ? volumeShm
+        : null,
+
+    amt:
+      Number.isFinite(tokenAmount)
+        ? tokenAmount
+        : null,
+
+    block:
+      trade.block ??
+      null,
+
+    timestamp:
+      timestamp,
+
+    tx:
+      trade.tx ||
+      trade.hash ||
+      trade.tx_hash ||
+      ""
+
+  };
+
+}
+
+
+function calculateTokenVolume(
+  result
+) {
+
+  /*
+   * Prefer an API-provided all-time
+   * volume when available.
+   */
+
+  const apiVolume =
+    firstFiniteNumber(
+      result.token.volume_usd,
+      result.token.volumeUsd,
+      result.token.total_volume_usd,
+      result.token.totalVolumeUsd,
+      result.token.volume_24h_usd,
+      result.token.volume24hUsd
+    );
+
+
+  if (
+    Number.isFinite(
+      apiVolume
+    )
+  ) {
+
+    return apiVolume;
+
+  }
+
+
+  /*
+   * Otherwise sum the USD value of
+   * the trades returned by Sikka.
+   */
+
+  return result.trades.reduce(
+    (
+      total,
+      trade
+    ) => {
+
+      if (
+        Number.isFinite(
+          trade.volumeUsd
+        )
+      ) {
+
+        return (
+          total +
+          trade.volumeUsd
+        );
+
+      }
+
+      return total;
+
+    },
+    0
+  );
+
+}
+
+
 
 async function getShmUsd() {
 
-  // ------------------------------------------------
-  // 1. COINGECKO
-  // ------------------------------------------------
-
   try {
 
     const response =
       await fetch(
-
-        "https://api.coingecko.com/api/v3/simple/price?ids=shardeum-2&vs_currencies=usd",
-
+        "https://api.coinpaprika.com/v1/tickers/shm-shardeum",
         {
-          cache:
-            "no-store",
-
+          cache: "no-store",
           headers: {
-
             Accept:
-              "application/json",
-
-            "User-Agent":
-              "ShantumAI/1.0"
-
+              "application/json"
           }
-
         }
-
       );
 
+    if (!response.ok) {
+      throw new Error(
+        `SHM price HTTP ${response.status}`
+      );
+    }
+
+    const data =
+      await response.json();
+
+    const price =
+      Number(
+        data?.quotes?.USD?.price
+      );
 
     if (
-      response.ok
+      !Number.isFinite(price) ||
+      price <= 0
+    ) {
+      throw new Error(
+        "Invalid SHM/USD price"
+      );
+    }
+
+    return price;
+
+  } catch (error) {
+
+    console.error(
+      "SHM USD lookup failed:",
+      error
+    );
+
+    return NaN;
+
+  }
+
+}
+
+function firstFiniteNumber(
+  ...values
+) {
+
+  for (
+    const value of values
+  ) {
+
+    const number =
+      Number(value);
+
+    if (
+      Number.isFinite(
+        number
+      )
     ) {
 
-      const data =
-        await response.json();
-
-
-      const price =
-        Number(
-          data?.["shardeum-2"]?.usd
-        );
-
-
-      if (
-        Number.isFinite(price) &&
-        price > 0
-      ) {
-
-        return price;
-
-      }
+      return number;
 
     }
 
   }
-
-  catch (error) {
-
-    console.warn(
-
-      "CoinGecko SHM error:",
-
-      error?.message
-
-    );
-
-  }
-
-
-  // ------------------------------------------------
-  // 2. GATE FALLBACK
-  // ------------------------------------------------
-
-  try {
-
-    const response =
-      await fetch(
-
-        "https://api.gateio.ws/api/v4/spot/tickers?currency_pair=SHM_USDT",
-
-        {
-          cache:
-            "no-store",
-
-          headers: {
-
-            Accept:
-              "application/json",
-
-            "User-Agent":
-              "ShantumAI/1.0"
-
-          }
-
-        }
-
-      );
-
-
-    if (
-      response.ok
-    ) {
-
-      const data =
-        await response.json();
-
-
-      const price =
-        Number(
-          data?.[0]?.last
-        );
-
-
-      if (
-        Number.isFinite(price) &&
-        price > 0
-      ) {
-
-        return price;
-
-      }
-
-    }
-
-  }
-
-  catch (error) {
-
-    console.warn(
-
-      "Gate SHM error:",
-
-      error?.message
-
-    );
-
-  }
-
 
   return NaN;
+
+}
+
+
+function getTimestamp(
+  trade
+) {
+
+  let timestamp =
+    Number(
+      trade.timestamp ||
+      trade.t ||
+      trade.created_at ||
+      trade.createdAt ||
+      0
+    );
+
+
+  if (
+    timestamp > 0 &&
+    timestamp < 100000000000
+  ) {
+
+    timestamp *= 1000;
+
+  }
+
+
+  return Number.isFinite(
+    timestamp
+  )
+    ? timestamp
+    : 0;
 
 }
