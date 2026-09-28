@@ -275,42 +275,9 @@ button,input,select{font:inherit}
 @media(max-width:700px){.gas-grid{grid-template-columns:1fr}.gas-title{font-size:19px}.gas-box strong{font-size:20px}}
 
 
-/* LIVE BLOCKCHAIN ACTIVITY */
-.chain-card{width:100%;margin-top:14px;border:1px solid #155083;border-radius:15px;background:linear-gradient(145deg,#071a31,#031021);padding:18px}
-.chain-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
-.chain-title{display:flex;align-items:center;gap:10px;min-width:0}
-.chain-title h2{font-size:22px;font-weight:900;margin:0}
-.chain-live{display:flex;align-items:center;gap:7px;color:#18e39a;background:rgba(24,227,154,.08);border:1px solid rgba(24,227,154,.35);border-radius:18px;padding:6px 11px;font-size:11px;font-weight:800;white-space:nowrap}
-.chain-meta{color:#91a9c4;font-size:10px;text-align:right}
-.chain-table-wrap{overflow-x:auto;border-radius:11px;border:1px solid rgba(255,255,255,.06)}
-.chain-table{min-width:700px}
-.chain-row{display:grid;grid-template-columns:1fr 1fr 1.35fr 1.35fr 1.35fr;align-items:center;min-height:48px;padding:0 11px;border-top:1px solid rgba(255,255,255,.045)}
-.chain-row.head{min-height:41px;background:#18283f;border:0;color:#dcecff;font-size:10px;font-weight:900}
-.chain-cell{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.chain-type{font-weight:900}
-.chain-badge{display:inline-flex;align-items:center;gap:7px;font-weight:900;white-space:nowrap}
-.chain-badge-dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:0 0 8px}
-.chain-badge.coin{color:#ff9a45}
-.chain-badge.coin .chain-badge-dot{background:#ff9a45;box-shadow:0 0 8px rgba(255,154,69,.55)}
-.chain-badge.staking{color:#18e39a}
-.chain-badge.staking .chain-badge-dot{background:#18e39a;box-shadow:0 0 8px rgba(24,227,154,.55)}
-.chain-badge.token{color:#ff9a45}
-.chain-badge.token .chain-badge-dot{background:#ff9a45;box-shadow:0 0 8px rgba(255,154,69,.55)}
-.chain-badge.unstaking{color:#7aa7ff}
-.chain-badge.unstaking .chain-badge-dot{background:#7aa7ff;box-shadow:0 0 8px rgba(122,167,255,.55)}
-.chain-badge.contract{color:#c5a4ff}
-.chain-badge.contract .chain-badge-dot{background:#c5a4ff;box-shadow:0 0 8px rgba(197,164,255,.55)}
-.chain-block{color:#dcecff;font-weight:800}
-.chain-time{color:#9eb4cd}
-.chain-amount{color:#dcecff;font-weight:800}
-.chain-gas{color:#9eb6d0}
-.chain-status{padding:22px;text-align:center;color:#91a9c4;font-size:12px}
-@media(max-width:700px){
-  .chain-card{padding:12px}
-  .chain-head{align-items:flex-start;flex-direction:column}
-  .chain-meta{text-align:left}
-  .chain-title h2{font-size:19px}
-}
+/* LIVE SHM WHALE ACTIVITY */
+.whale-card{width:100%;margin-top:14px;border:1px solid rgba(38,128,220,.42);border-radius:18px;background:linear-gradient(145deg,#071a31,#030d1d);padding:20px;box-shadow:0 18px 55px rgba(0,0,0,.22),inset 0 1px 0 rgba(255,255,255,.025)}
+.whale-head{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:16px}.whale-title{display:flex;align-items:center;gap:9px;font-size:22px;font-weight:900}.whale-icon{font-size:25px;filter:drop-shadow(0 0 9px rgba(22,143,255,.55))}.whale-live{display:inline-flex;align-items:center;gap:6px;color:#18e39a;background:rgba(24,227,154,.08);border:1px solid rgba(24,227,154,.35);border-radius:18px;padding:5px 10px;font-size:10px;font-weight:900;white-space:nowrap}.whale-subtitle{margin-top:6px;color:#819ab5;font-size:11px}.whale-subtitle strong{color:#bfe5ff}.whale-meta{color:#718ba8;font-size:10px;text-align:right;white-space:nowrap}.whale-list{display:grid;gap:9px;max-height:845px;overflow-y:auto;padding-right:6px;scroll-behavior:smooth;scrollbar-width:thin;scrollbar-color:#24577f transparent}.whale-list::-webkit-scrollbar{width:7px}.whale-list::-webkit-scrollbar-track{background:transparent}.whale-list::-webkit-scrollbar-thumb{background:#24577f;border-radius:10px}.whale-list::-webkit-scrollbar-thumb:hover{background:#347eae}.whale-row{display:grid;grid-template-columns:1.15fr 1.15fr 2fr 1.15fr 42px;align-items:center;gap:14px;min-height:76px;padding:12px 14px;border:1px solid rgba(110,150,210,.12);border-radius:12px;background:rgba(5,20,40,.72);transition:.16s ease}.whale-row:hover{border-color:rgba(22,143,255,.38);background:rgba(8,27,51,.9);transform:translateY(-1px)}.whale-type{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:900;letter-spacing:.3px;line-height:1.15}.whale-type-dot{width:8px;height:8px;border-radius:50%;box-shadow:0 0 10px currentColor;flex:0 0 auto}.whale-type.transfer{color:#20a6ff}.whale-type.staking{color:#b77cff}.whale-type.unstaking{color:#ffb52b}.whale-type.claim{color:#18e39a}.whale-type.contract{color:#ff6179}.whale-type.token{color:#18e39a}.whale-method{display:block;margin-top:4px;color:#7891aa;font-size:9px;font-weight:700;letter-spacing:.15px;text-transform:none}.whale-amount{font-size:15px;font-weight:900;color:#fff;white-space:nowrap;line-height:1.15}.whale-usd{display:block;margin-top:4px;color:#718aa7;font-size:9px;font-weight:700}.whale-addresses{min-width:0;color:#dcecff;font-family:Consolas,monospace;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.whale-addresses span{color:#dcecff}.whale-time{text-align:right;color:#91a9c4;font-size:10px;white-space:nowrap;line-height:1.15}.whale-time small{display:block;color:#5f7895;font-size:8px;margin-top:4px}.whale-details{width:32px;height:32px;border:1px solid #164b77;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#a9d8ff;text-decoration:none;background:#06182d;font-size:15px}.whale-status{padding:34px 10px;text-align:center;color:#8299b3;font-size:11px;border:1px dashed rgba(110,150,210,.14);border-radius:12px}.whale-status.error{color:#ff6179}@media(max-width:900px){.whale-row{grid-template-columns:1fr 1fr;gap:10px}.whale-addresses{grid-column:1/-1}.whale-time{text-align:left}.whale-details{justify-self:end;grid-column:2;grid-row:1}.whale-head{align-items:flex-start;flex-direction:column}.whale-meta{text-align:left}}@media(max-width:560px){.whale-card{padding:13px}.whale-title{font-size:18px}.whale-row{grid-template-columns:1fr auto;padding:12px}.whale-amount{font-size:15px}.whale-addresses{grid-column:1/-1}.whale-time{text-align:left}.whale-details{grid-column:2;grid-row:1}}
 </style>
 </head>
 
@@ -402,23 +369,7 @@ button,input,select{font:inherit}
   </div>
 </section>
 
-<section class="chain-card" id="blockchain-activity">
-  <div class="chain-head">
-    <div class="chain-title">
-      <h2>⛓️ Live Blockchain Activity</h2>
-      <span id="chainLive" class="chain-live"><i class="dot"></i> LIVE</span>
-    </div>
-    <div id="chainMeta" class="chain-meta">Loading Shardeum blockchain activity...</div>
-  </div>
-  <div class="chain-table-wrap">
-    <div class="chain-table">
-      <div class="chain-row head">
-        <div>TYPE</div><div>BLOCK</div><div>TIME</div><div>AMOUNT (SHM)</div><div>GAS FEE (SHM)</div>
-      </div>
-      <div id="chainBody"><div class="chain-status">Loading blockchain activity...</div></div>
-    </div>
-  </div>
-</section>
+<section class="whale-card" id="blockchain-activity"><div class="whale-head"><div><div class="whale-title"><span class="whale-icon">🐋</span> Live SHM Whale Activity <span id="chainLive" class="whale-live"><i class="dot"></i> LIVE</span></div><div class="whale-subtitle">Native SHM transactions above <strong>500,000 SHM</strong></div></div><div id="chainMeta" class="whale-meta">Monitoring Shardeum...</div></div><div id="chainBody" class="whale-list"><div class="whale-status">Loading large SHM transactions...</div></div></section>
 
 <section id="shantum" class="lower">
   <div id="shantumCard" class="card">Loading Shantum...</div>
@@ -868,123 +819,15 @@ $("chartButton").onclick=()=>$("shantum").scrollIntoView({behavior:"smooth"});
 window.onresize=()=>{if(chart)chart.resize($("chart").clientWidth,330)}
 
 
-/* LIVE SHARDEUM BLOCKCHAIN ACTIVITY */
-const CHAIN_ROWS = 15;
-let chainRows = [];
-let chainLoading = false;
-
-function chainSetLive(live, text){
-  const el=$("chainLive"), meta=$("chainMeta");
-  if(!el || !meta) return;
-  el.innerHTML=`<i class="dot"></i> ${live ? "LIVE" : "OFFLINE"}`;
-  el.style.color=live ? "#18e39a" : "#ff4d6d";
-  el.style.borderColor=live ? "rgba(24,227,154,.35)" : "rgba(255,77,109,.35)";
-  meta.textContent=text || (live ? "Auto updating from Shardeum" : "Blockchain unavailable");
-}
-
-function chainTypeDisplay(type){
-  const t=String(type||"").toUpperCase();
-
-  if(t==="COIN_TRANSFER" || t==="TRANSFER" || t==="COIN TRANSFER"){
-    return {label:"Coin Transfer", cls:"coin"};
-  }
-
-  if(t==="TOKEN_TRANSFER" || t==="TOKEN TRANSFER"){
-    return {label:"Token Transfer", cls:"token"};
-  }
-
-  if(t==="STAKING" || t==="STAKE"){
-    return {label:"Staking", cls:"staking"};
-  }
-
-  if(t==="UNSTAKING" || t==="UNSTAKE"){
-    return {label:"Unstaking", cls:"unstaking"};
-  }
-
-  return {label:"Contract", cls:"contract"};
-}
-
-function renderChainRows(){
-  const body=$("chainBody");
-  if(!body) return;
-  if(!chainRows.length){
-    body.innerHTML='<div class="chain-status">No recent blockchain activity found.</div>';
-    return;
-  }
-
-  body.innerHTML=chainRows.slice(0,CHAIN_ROWS).map(r=>{
-    const display=chainTypeDisplay(r.type);
-
-    return `
-    <div class="chain-row">
-      <div class="chain-cell chain-type">
-        <span class="chain-badge ${display.cls}">
-          <span class="chain-badge-dot"></span>${display.label}
-        </span>
-      </div>
-      <div class="chain-cell chain-block">${Number(r.block||0).toLocaleString("en-US")}</div>
-      <div class="chain-cell chain-time">${esc(r.time ? new Date(r.time).toLocaleString("en-IN",{timeZone:"Asia/Kolkata",day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:true})+" IST" : "—")}</div>
-      <div class="chain-cell chain-amount">${esc(String(r.amountShm ?? r.amount ?? "0"))} SHM</div>
-      <div class="chain-cell chain-gas">${esc(String(r.gasFeeShm ?? r.gas ?? "0"))} SHM</div>
-    </div>`;
-  }).join("");
-}
-
-async function loadBlockchainActivity(){
-  if(chainLoading) return;
-  chainLoading=true;
-  const body=$("chainBody");
-  const hadRows=chainRows.length>0;
-
-  try{
-    const controller=new AbortController();
-    const timeout=setTimeout(()=>controller.abort(),10000);
-    const response=await fetch("/api/blockchain-activity?_="+Date.now(),{
-      method:"GET",cache:"no-store",headers:{"Accept":"application/json"},signal:controller.signal
-    });
-    clearTimeout(timeout);
-
-    const text=await response.text();
-    let data;
-    try{ data=JSON.parse(text); }
-    catch{ throw new Error("Blockchain API returned invalid JSON"); }
-
-    if(!response.ok || !data.success) throw new Error(data.error || "Blockchain API error");
-
-    chainRows=Array.isArray(data.activities) ? data.activities : [];
-    renderChainRows();
-
-    const count=chainRows.length;
-    const updated=data.updatedAt ? new Date(data.updatedAt) : new Date();
-    const updatedText=Number.isNaN(updated.getTime()) ? "" :
-      " • Updated "+updated.toLocaleTimeString("en-IN",{
-        timeZone:"Asia/Kolkata",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:true
-      })+" IST";
-
-    chainSetLive(true,count ? `${count} transactions • Auto updating${updatedText}` : "No recent transactions • Auto updating");
-  }catch(e){
-    console.error("Blockchain activity error:",e);
-    if(!hadRows && body) body.innerHTML='<div class="chain-status error">Unable to load blockchain activity. Retrying...</div>';
-    chainSetLive(hadRows,hadRows ? "Last data shown • retrying update" : "Unable to connect • retrying automatically");
-  }finally{
-    chainLoading=false;
-  }
-}
-
-loadBlockchainActivity();
-setInterval(loadBlockchainActivity,20000);
-
-async function init(){
- updateDate();
- await Promise.all([loadTrades(true),loadShantum(),loadChart()])
-}
-init();
-setInterval(()=>{
- updateDate();
- loadTrades(false);
- loadShantum();
-},20000);
-
+/* LIVE SHM WHALE ACTIVITY - native SHM > 500,000 */
+const WHALE_THRESHOLD_SHM = 500000; let chainRows=[]; let chainLoading=false;
+function chainSetLive(live,text){const el=$("chainLive"),meta=$("chainMeta");if(!el||!meta)return;el.innerHTML=`<i class="dot"></i> ${live?"LIVE":"OFFLINE"}`;el.style.color=live?"#18e39a":"#ff4d6d";el.style.borderColor=live?"rgba(24,227,154,.35)":"rgba(255,77,109,.35)";meta.textContent=text||"Auto updating from Shardeum";}
+function chainTypeDisplay(type,method){const t=String(type||"").toUpperCase(),m=String(method||"").toUpperCase();if(t.includes("UNSTAK"))return{label:"UNSTAKING",sub:m&&m!=="UNSTAKING"?m:"Unstaking",cls:"unstaking"};if(t.includes("CLAIM"))return{label:"CLAIM",sub:m&&m!=="CLAIM"?m:"Reward claim",cls:"claim"};if(t.includes("STAK"))return{label:"STAKING",sub:m&&m!=="STAKING"?m:"Staking",cls:"staking"};if(t.includes("TOKEN"))return{label:"TOKEN TRANSFER",sub:m&&m!=="TOKEN_TRANSFER"?m:"Token transfer",cls:"token"};if(t.includes("COIN")||t==="TRANSFER")return{label:"SHM TRANSFER",sub:m&&m!=="SEND"?m:"Send",cls:"transfer"};if(m)return{label:"SMART CONTRACT",sub:m,cls:"contract"};return{label:"SMART CONTRACT",sub:"Contract interaction",cls:"contract"};}
+function shortAddress(v){const s=String(v||"");return s.length>18?`${s.slice(0,8)}...${s.slice(-6)}`:(s||"Unknown");}
+function getTxAddress(tx,key){if(!tx)return"";if(key==="from")return tx.from?.hash||tx.from?.address||tx.from||tx.from_address||"";return tx.to?.hash||tx.to?.address||tx.to||tx.to_address||"";}
+function renderChainRows(){const body=$("chainBody");if(!body)return;if(!chainRows.length){body.innerHTML='<div class="whale-status">No native SHM transactions above 500,000 SHM found in the latest scanned blocks.</div>';return;}body.innerHTML=chainRows.map(r=>{const d=chainTypeDisplay(r.type,r.methodRaw||r.method),from=shortAddress(getTxAddress(r,"from")),time=r.time?new Date(r.time):null;const tt=time&&!Number.isNaN(time.getTime())?time.toLocaleTimeString("en-IN",{timeZone:"Asia/Kolkata",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:true})+" IST":"—";const dt=time&&!Number.isNaN(time.getTime())?time.toLocaleDateString("en-IN",{timeZone:"Asia/Kolkata",day:"2-digit",month:"short",year:"numeric"}):"";const txUrl=r.txHash?`https://explorer.shardeum.org/tx/${encodeURIComponent(r.txHash)}`:"https://explorer.shardeum.org/";return `<div class="whale-row"><div class="whale-type ${d.cls}"><span class="whale-type-dot"></span><span>${d.label}<small class="whale-method">${esc(d.sub||"")}</small></span></div><div class="whale-amount">${esc(String(r.amountShm))} SHM<span class="whale-usd">Native SHM</span></div><div class="whale-addresses"><span>${esc(from)}</span></div><div class="whale-time">${esc(tt)}<small>${esc(dt)}</small></div><a class="whale-details" href="${txUrl}" target="_blank" rel="noopener noreferrer" title="View transaction">↗</a></div>`;}).join("");}
+async function loadBlockchainActivity(){if(chainLoading)return;chainLoading=true;const body=$("chainBody"),hadRows=chainRows.length>0;try{const c=new AbortController(),timeout=setTimeout(()=>c.abort(),10000);const response=await fetch("/api/blockchain-activity?_="+Date.now(),{method:"GET",cache:"no-store",headers:{Accept:"application/json"},signal:c.signal});clearTimeout(timeout);const text=await response.text();let data;try{data=JSON.parse(text);}catch{throw new Error("Blockchain API returned invalid JSON");}if(!response.ok||!data.success)throw new Error(data.error||"Blockchain API error");chainRows=Array.isArray(data.activities)?data.activities:[];renderChainRows();const updated=data.updatedAt?new Date(data.updatedAt):new Date(),ut=Number.isNaN(updated.getTime())?"":`Updated ${updated.toLocaleTimeString("en-IN",{timeZone:"Asia/Kolkata",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:true})} IST`;chainSetLive(true,chainRows.length?`${chainRows.length} large transactions • ${ut}`:`No qualifying transactions • ${ut}`);}catch(e){console.error("Blockchain whale activity error:",e);if(!hadRows&&body)body.innerHTML='<div class="whale-status error">Unable to load large SHM transactions. Retrying...</div>';chainSetLive(hadRows,"Last data shown • retrying update");}finally{chainLoading=false;}}
+loadBlockchainActivity();setInterval(loadBlockchainActivity,20000);
 
 /* SHARDEUM GAS PRICE - ADDED AT THE VERY END */
 async function loadGasPrice(){
