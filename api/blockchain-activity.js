@@ -1,6 +1,7 @@
 const EXPLORER = "https://explorer.shardeum.org";
 
 const TARGET_TRANSACTIONS = 20;
+const MIN_SHM_AMOUNT = 500000;
 const PAGE_SIZE = 50;
 const MAX_PAGES = 5;
 const TIMEOUT_MS = 12000;
@@ -54,8 +55,10 @@ function formatShm(value) {
   const wei = toBigInt(value);
   const base = 1000000000000000000n;
   const whole = wei / base;
-  const fraction = (wei % base).toString().padStart(18, "0").replace(/0+$/, "");
-  return fraction ? `${whole}.${fraction}` : `${whole}`;
+
+  // Display only whole SHM in the whale activity UI.
+  // The filtering threshold still uses the original exact Wei value.
+  return `${whole}`;
 }
 
 function getTransactionTypes(tx) {
@@ -71,19 +74,72 @@ function getTransactionTypes(tx) {
   );
 }
 
+function getTransactionMethod(tx) {
+  const candidates = [
+    tx?.method,
+    tx?.method_name,
+    tx?.methodName,
+    tx?.function,
+    tx?.function_name,
+    tx?.functionName,
+    tx?.decoded_input?.method_call,
+    tx?.decoded_input?.method_name,
+    tx?.decodedInput?.method_call,
+    tx?.decodedInput?.method_name
+  ];
+
+  for (const value of candidates) {
+    if (value !== null && value !== undefined && String(value).trim()) {
+      return String(value).trim();
+    }
+  }
+
+  return "";
+}
+
+function normalizeMethod(tx) {
+  const method = getTransactionMethod(tx);
+  const m = method.toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+
+  if (!m) return "";
+
+  if (m.includes("withdraw rewards") || m.includes("withdraw reward") || m === "claim" || m.includes("claim reward") || m.includes("claim rewards")) {
+    return "CLAIM";
+  }
+
+  if (m.includes("unstake") || m.includes("un stake") || m.includes("withdraw stake")) {
+    return "UNSTAKING";
+  }
+
+  if (m === "stake" || m.includes("staking") || m === "delegate" || m.includes("delegate")) {
+    return "STAKING";
+  }
+
+  if (m === "send" || m === "transfer" || m.includes("coin transfer")) {
+    return "SEND";
+  }
+
+  return method;
+}
+
 function normalizeType(tx) {
   const types = getTransactionTypes(tx);
+  const method = getTransactionMethod(tx).toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
 
-  // Specific types first, so staking/token transfers are never swallowed by CONTRACT.
+  // Use the explorer's specific transaction type/method before generic contract detection.
   if (types.some(x =>
     x.includes("unstake") || x.includes("un_stake") || x.includes("unstaking")
-  )) {
+  ) || method.includes("unstake") || method.includes("un stake") || method.includes("withdraw stake")) {
     return "UNSTAKING";
+  }
+
+  if (method.includes("withdraw rewards") || method.includes("withdraw reward") || method === "claim" || method.includes("claim reward") || method.includes("claim rewards")) {
+    return "CLAIM";
   }
 
   if (types.some(x =>
     x === "stake" || x === "staking" || x.includes("stake")
-  )) {
+  ) || method === "delegate" || method === "stake" || method.includes("staking")) {
     return "STAKING";
   }
 
@@ -95,19 +151,19 @@ function normalizeType(tx) {
 
   if (types.some(x =>
     x.includes("coin_transfer") || x === "transfer" || x.includes("cointransfer")
-  )) {
+  ) || method === "send" || method === "transfer") {
     return "COIN_TRANSFER";
   }
 
   if (
     types.some(x => x.includes("contract") || x.includes("smart_contract")) ||
-    tx?.method ||
+    getTransactionMethod(tx) ||
     tx?.to?.is_contract === true
   ) {
     return "CONTRACT";
   }
 
-  if (tx?.value !== undefined && !tx?.method) {
+  if (tx?.value !== undefined && !getTransactionMethod(tx)) {
     return "COIN_TRANSFER";
   }
 
@@ -216,14 +272,22 @@ export default async function handler(req, res) {
     const source = await fetchTransactions();
 
     const normalized = source
-      .map(tx => ({
-        type: normalizeType(tx),
-        block: normalizeBlock(tx),
-        time: normalizeTime(tx),
-        amountShm: formatShm(getAmountWei(tx)),
-        gasFeeShm: formatShm(getGasFeeWei(tx))
-      }))
-      .filter(tx => tx.block > 0);
+      .map(tx => {
+        const amountWei = toBigInt(getAmountWei(tx));
+        return {
+          type: normalizeType(tx),
+          method: normalizeMethod(tx),
+          methodRaw: getTransactionMethod(tx),
+          block: normalizeBlock(tx),
+          time: normalizeTime(tx),
+          amountShm: formatShm(amountWei),
+          txHash: tx?.hash || tx?.transaction_hash || tx?.transactionHash || "",
+          from: tx?.from?.hash || tx?.from?.address || tx?.from || tx?.from_address || "",
+          to: tx?.to?.hash || tx?.to?.address || tx?.to || tx?.to_address || "",
+          _amountWei: amountWei
+        };
+      })
+      .filter(tx => tx.block > 0 && tx._amountWei > BigInt(MIN_SHM_AMOUNT) * 1000000000000000000n);
 
     normalized.sort((a, b) => {
       const blockDiff = Number(b.block) - Number(a.block);
@@ -242,7 +306,8 @@ export default async function handler(req, res) {
       if (seen.has(key)) continue;
 
       seen.add(key);
-      activities.push(tx);
+      const { _amountWei, ...publicTx } = tx;
+      activities.push(publicTx);
 
       if (activities.length >= TARGET_TRANSACTIONS) break;
     }
